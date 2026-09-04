@@ -28,20 +28,48 @@ export function LocationPicker({
     if (!container.current || map.current) return;
     const start: [number, number] = [lng ?? 78.666, lat ?? 17.4718];
 
+    const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+    const style: maplibregl.StyleSpecification = cartoKey
+      ? {
+          version: 8,
+          sources: {
+            carto: {
+              type: "raster",
+              tiles: [`https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key=${cartoKey}`],
+              tileSize: 256,
+              attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+            },
+          },
+          layers: [{ id: "carto", type: "raster", source: "carto" }],
+        }
+      : {
+          version: 8,
+          sources: {
+            esri_base: {
+              type: "raster",
+              tiles: [
+                "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+              ],
+              tileSize: 256,
+              attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+            },
+            esri_ref: {
+              type: "raster",
+              tiles: [
+                "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+              ],
+              tileSize: 256,
+            },
+          },
+          layers: [
+            { id: "esri_base", type: "raster", source: "esri_base" },
+            { id: "esri_ref", type: "raster", source: "esri_ref" },
+          ],
+        };
+
     map.current = new maplibregl.Map({
       container: container.current,
-      style: {
-        version: 8,
-        sources: {
-          carto: {
-            type: "raster",
-            tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-          },
-        },
-        layers: [{ id: "carto", type: "raster", source: "carto" }],
-      },
+      style,
       center: start,
       zoom: 14,
       attributionControl: { compact: true },
