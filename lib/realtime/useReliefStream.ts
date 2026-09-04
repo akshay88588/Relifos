@@ -47,26 +47,41 @@ export function useReliefStream() {
   const lastSeq = useRef(0);
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflight = useRef(false);
+  /** a refetch was requested while one was already running */
+  const pending = useRef(false);
 
   const noteSeq = (list: Ev[]) => {
     for (const e of list) if (e.seq > lastSeq.current) lastSeq.current = e.seq;
   };
 
   const refetch = useCallback(async () => {
-    if (inflight.current) return;
+    // COALESCE, DO NOT DROP.
+    //
+    // This used to `return` when a fetch was already in flight, and nothing
+    // re-scheduled the skipped read. An event arriving during a fetch was
+    // therefore silently discarded, and the screen kept showing stale state
+    // until some later event happened to arrive when the hook was idle — which
+    // is how /responder could show a unit as available while /command already
+    // had it offline. Now a request made during a fetch sets `pending` and the
+    // loop runs again, so the last write always wins.
+    if (inflight.current) { pending.current = true; return; }
     inflight.current = true;
     try {
-      const res = await fetch("/api/state", { cache: "no-store" });
-      if (res.status === 401 || res.status === 403) {
-        setError("Sign in as a coordinator to view live state."); return;
-      }
-      if (!res.ok) { setError(`State read failed (${res.status})`); return; }
-      const data: ReliefState = await res.json();
-      setState(data);
-      const incoming = data.events ?? [];
-      noteSeq(incoming);
-      setEvents((prev) => mergeEvents(prev, incoming));
-      setError(null);
+      do {
+        pending.current = false;
+        const res = await fetch("/api/state", { cache: "no-store" });
+        if (res.status === 401 || res.status === 403) {
+          setError("Sign in as a coordinator to view live state.");
+          return;
+        }
+        if (!res.ok) { setError(`State read failed (${res.status})`); return; }
+        const data: ReliefState = await res.json();
+        setState(data);
+        const incoming = data.events ?? [];
+        noteSeq(incoming);
+        setEvents((prev) => mergeEvents(prev, incoming));
+        setError(null);
+      } while (pending.current);
     } catch (err: any) {
       setError(err?.message ?? "Network error");
     } finally {
