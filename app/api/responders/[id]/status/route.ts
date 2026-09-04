@@ -21,6 +21,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { data, error } = await parseBody(req, schema);
   if (error) return error;
   const { id } = await ctx.params;
+
+  // A responder account bound to a unit may only move that unit. Coordinators
+  // and admins keep the override. Unbound demo accounts are allowed through so
+  // the walkthrough still works, but a provisioned account cannot take another
+  // agency's unit out of service.
+  if (user!.role === "responder" && user!.responder_id && user!.responder_id !== id) {
+    return fail("forbidden", "You can only change the status of your own unit", 403);
+  }
+
   try {
     const result = await setResponderStatus(id, data!.status, { id: user!.id, label: user!.display_name });
     return ok(result);

@@ -6,7 +6,7 @@ import { intakeIncident } from "./incidentService";
 import { setResponderStatus } from "./responderService";
 import { adjustShelterCapacity } from "./resourceService";
 import { ageOpenIncidents } from "./reconciler";
-import { getConfig, setConfig } from "./config";
+import { setConfig } from "./config";
 
 /**
  * SIMULATION AND CHAOS MODE.
@@ -246,19 +246,33 @@ async function executeStep(step: ChaosStep, runId: string) {
   });
 }
 
-/** Removes every simulated row and resets tuning. */
+/**
+ * Removes every SIMULATED row and resets tuning.
+ *
+ * Deliberately scoped. Deleting the simulated incidents cascades to their
+ * events, assessments, candidates, assignments, AI decisions, factors and
+ * notifications (every one of those tables declares
+ * `incident_id ... on delete cascade`), so the demo world disappears without
+ * this function ever issuing an unscoped delete. Events and notifications
+ * belonging to REAL reports are left alone: an audit log that a UI button can
+ * silently truncate is not an audit log.
+ */
 export async function resetSimulation() {
   const db = admin();
-  await db.from("simulation_runs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  await db.from("incidents").delete().eq("is_simulated", true);
+
+  // Chaos-run bookkeeping: events tagged with a run, then the runs themselves.
+  await db.from("system_events").delete().not("simulation_run_id", "is", null);
+  await db.from("simulation_runs").delete().not("id", "is", null);
+
+  // Cascades clear the dependent rows for each simulated incident.
+  const { data: removed } = await db.from("incidents").delete().eq("is_simulated", true).select("id");
   await db.from("responders").delete().eq("is_simulated", true);
   await db.from("shelters").delete().eq("is_simulated", true);
   await db.from("resources").delete().eq("is_simulated", true);
-  await db.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  await db.from("system_events").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+
   await setConfig("congestion_factor", 1.0);
   await setConfig("simulation_active", false);
-  return { reset: true };
+  return { reset: true, incidents_removed: removed?.length ?? 0 };
 }
 
 export { CENTRE };

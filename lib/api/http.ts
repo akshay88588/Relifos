@@ -44,15 +44,35 @@ function memoryAllows(key: string, limit: number, windowMs: number) {
   return b.count <= limit;
 }
 
+let sharedCounterWarned = false;
+
 export async function rateLimit(key: string, perMinute = 10): Promise<boolean> {
+  // The in-process window runs first so an obvious flood never reaches the DB.
   if (!memoryAllows(key, perMinute, 60_000)) return false;
   try {
     const { data, error } = await admin().rpc("consume_rate_limit", {
       p_key: key, p_limit: perMinute, p_window_seconds: 60,
     });
-    if (error) return true; // memory window already allowed it
+    if (error) {
+      // Fail open, because refusing every emergency report when the limiter is
+      // broken is worse than a weaker limit - but say so loudly and exactly
+      // once, so a missing migration cannot masquerade as a working limiter.
+      if (!sharedCounterWarned) {
+        sharedCounterWarned = true;
+        console.error(
+          "[ratelimit] shared counter unavailable - falling back to a PER-PROCESS window. " +
+          "On serverless this means the published limit is not globally enforced. " +
+          "Apply supabase/migrations/0006_rate_limit.sql. Cause:", error.message,
+        );
+      }
+      return true;
+    }
     return data !== false;
-  } catch {
+  } catch (err) {
+    if (!sharedCounterWarned) {
+      sharedCounterWarned = true;
+      console.error("[ratelimit] shared counter threw - per-process window only:", err);
+    }
     return true;
   }
 }

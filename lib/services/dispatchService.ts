@@ -35,20 +35,30 @@ export async function approveDispatch(assignmentId: string, actor: { id: string;
   const responder = await R.getResponder(assignment.responder_id);
   if (!incident || !responder) return { ok: false, message: "Incident or responder missing" };
 
-  // If the responder was already committed elsewhere, this UPDATE trips the
-  // unique index. That is the conflict guard doing its job.
-  const { data: dispatched, error } = await A.updateAssignment(assignmentId, {
-    status: "dispatched",
+  // Two guards fire here.
+  //
+  // 1. The status precondition is part of the UPDATE, not a separate read. A
+  //    double-clicked Approve sends two requests that both pass the check
+  //    above; the second one matches zero rows and is refused, so the load
+  //    counter and the event log are only ever moved once per dispatch.
+  // 2. If the responder was already committed elsewhere, this UPDATE trips the
+  //    unique partial index. That is the conflict guard doing its job.
+  const { data: dispatched, error } = await A.commitApproval(assignmentId, {
     approved_by: actor.id,
     approved_at: new Date().toISOString(),
-    requires_approval: false,
   });
 
   if (error) {
     if ((error as any).code === A.UNIQUE_VIOLATION) {
       return resolveConflict(assignment, incident, responder, correlationId);
     }
+    if ((error as any).code === A.NO_ROWS_RETURNED) {
+      return { ok: false, message: "This recommendation was already actioned." };
+    }
     return { ok: false, message: `Dispatch failed: ${error.message}` };
+  }
+  if (!dispatched) {
+    return { ok: false, message: "This recommendation was already actioned." };
   }
 
   await R.adjustLoad(responder.id, +1);
@@ -128,10 +138,17 @@ export async function rejectRecommendation(
   const correlationId = randomUUID();
   const assignment = await A.getAssignment(assignmentId);
   if (!assignment) return { ok: false, message: "Assignment not found" };
+  if (!A.OPEN_RECOMMENDATION_STATUSES.includes(assignment.status)) {
+    // Rejecting an already-dispatched assignment would orphan the responder:
+    // their load and status would never be released. Cancel it properly instead.
+    return { ok: false, message: `Assignment is already ${assignment.status} and cannot be rejected` };
+  }
 
-  await A.updateAssignment(assignmentId, {
-    status: "invalidated", invalidation_reason: `Rejected by coordinator: ${reason}`,
-  });
+  const { data: rejected } = await A.updateAssignmentIfStatus(
+    assignmentId, A.OPEN_RECOMMENDATION_STATUSES,
+    { status: "invalidated", invalidation_reason: `Rejected by coordinator: ${reason}` },
+  );
+  if (!rejected) return { ok: false, message: "This recommendation was already actioned." };
   await M.invalidateCandidate(assignment.incident_id, assignment.responder_id, `Rejected: ${reason}`);
   await publish({
     type: "match.invalidated", entity_type: "assignment", entity_id: assignmentId,
@@ -225,9 +242,11 @@ export async function advanceAssignment(
   if (!incident || !responder) return { ok: false, message: "Incident or responder missing" };
 
   if (action === "decline") {
-    await A.updateAssignment(assignmentId, {
-      status: "declined", declined_reason: reason ?? "No reason given",
-    });
+    const { data: declined } = await A.updateAssignmentIfStatus(
+      assignmentId, ["dispatched"],
+      { status: "declined", declined_reason: reason ?? "No reason given" },
+    );
+    if (!declined) return { ok: false, message: `Assignment is already ${assignment.status}` };
     await R.adjustLoad(responder.id, -1);
     await M.invalidateCandidate(incident.id, responder.id, `Declined: ${reason ?? "no reason"}`);
     await publish({
@@ -249,7 +268,18 @@ export async function advanceAssignment(
   } as const;
   const step = map[action];
 
-  await A.updateAssignment(assignmentId, { status: step.assignment });
+  // Each transition may only be taken from its own predecessor state, so a
+  // double-clicked Accept or Complete cannot fire the cascade (or the load
+  // decrement) twice.
+  const FROM: Record<typeof action, string[]> = {
+    accept: ["dispatched"],
+    arrive: ["accepted"],
+    complete: ["accepted", "on_scene"],
+  };
+  const { data: moved } = await A.updateAssignmentIfStatus(
+    assignmentId, FROM[action], { status: step.assignment },
+  );
+  if (!moved) return { ok: false, message: `Assignment is already ${assignment.status}` };
   await R.updateResponder(responder.id, { status: step.responder });
   if (action === "complete") {
     await R.adjustLoad(responder.id, -1);

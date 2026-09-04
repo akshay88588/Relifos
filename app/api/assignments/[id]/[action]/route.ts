@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { fail, guardConfigured, ok } from "@/lib/api/http";
 import { requireRole } from "@/lib/auth/rbac";
+import { getAssignment } from "@/lib/repositories/assignments";
 import { advanceAssignment } from "@/lib/services/dispatchService";
 
 export const maxDuration = 60;
@@ -23,6 +24,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string; ac
 
   let reason: string | undefined;
   try { reason = schema.parse(await req.json()).reason; } catch { /* body optional */ }
+
+  // Same rule as the status endpoint: a bound responder account may only act on
+  // its own assignments. Without this, any responder could accept, decline or
+  // complete another unit's dispatch by sending the request by hand.
+  if (user!.role === "responder" && user!.responder_id) {
+    const assignment = await getAssignment(id);
+    if (!assignment) return fail("not_found", "Assignment not found", 404);
+    if (assignment.responder_id !== user!.responder_id) {
+      return fail("forbidden", "This assignment belongs to another unit", 403);
+    }
+  }
 
   const result = await advanceAssignment(
     id, action as (typeof ACTIONS)[number], { id: user!.id, label: user!.display_name }, reason,

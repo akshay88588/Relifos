@@ -195,8 +195,11 @@ FEATHERLESS_MODEL_FALLBACK=
 
 ### The validation ladder
 
-1. **Transport** — non-2xx, timeout or empty body → one retry → retry without `response_format`
-   → retry on the fallback model.
+1. **Transport** — at most three attempts, with backoff: the call, then a retry without
+   `response_format` (some models reject it), then the fallback model. Statuses a retry cannot
+   fix — 400, 401, 403, 404, 422 and 429 — fail immediately rather than being hammered; a
+   provider that is already rate-limiting us is not helped by a tight retry loop. There are no
+   unbounded retries anywhere in the codebase.
 2. **Parse** — first balanced JSON object extracted, tolerating markdown fences and stray prose.
 3. **Schema** — `zod.safeParse`. On failure, ONE repair call feeding the model its own output
    plus the exact validation errors.
@@ -391,7 +394,10 @@ updating assignments, and pushing every change to the map and timeline.
 > ordinary services. The client is a metronome; it cannot cause a state change the server did
 > not perform.
 
-`POST /api/simulation/reset` deletes every simulated row.
+`POST /api/simulation/reset` deletes every simulated row. It is deliberately scoped: deleting the
+simulated incidents cascades to their events, assessments, candidates, assignments, AI decisions and
+notifications, and chaos-run bookkeeping is removed by run id. Events belonging to **real** reports
+are left alone — an audit log a UI button can silently truncate is not an audit log.
 
 ---
 
@@ -406,8 +412,11 @@ updating assignments, and pushing every change to the map and timeline.
   prefixed `NEXT_PUBLIC_`. `.env.local` is gitignored; `.env.example` is committed empty.
 - **Input validation** with zod on every request body and query parameter.
 - **Rate limiting** on the public reporting endpoint, backed by a Postgres fixed-window counter
-  (`consume_rate_limit`) so the limit is shared across every server instance, with an in-process
-  cache in front of it to absorb obvious floods before they reach the database.
+  (`consume_rate_limit`, defined in migration `0006_rate_limit.sql`) so the limit is shared across
+  every server instance, with an in-process cache in front of it to absorb obvious floods before
+  they reach the database. If that function is missing the code falls back to a per-process window
+  and logs a loud warning — it never pretends the shared limit is in force. Apply migration 0006,
+  or the published limit is not globally enforced on serverless.
 - **Model output is data, never instructions.** It is parsed, validated and bounded before it
   can influence anything, and never interpolated into SQL.
 
@@ -422,7 +431,9 @@ help. Every synthetic row is flagged `is_simulated`.
 ## Testing
 
 ```bash
-npm test          # 35 unit tests: priority, matching, approval policy, AI validation
+npm test          # 49 unit tests: priority, matching, approval policy, AI validation
+npm run typecheck # tsc --noEmit, strict mode, zero errors
+npm run lint      # next lint (NOT skipped during builds)
 npm run test:ai   # live Featherless call, validated against the schema
 npm run verify    # full end-to-end check against a running instance + the live database
                   # (finds the server on ports 3000-3003; or: npm run verify -- http://localhost:3001)
@@ -445,7 +456,8 @@ cp .env.example .env.local     # fill in the five values below
 npm run dev                    # http://localhost:3000
 ```
 
-Apply `supabase/migrations/*.sql` in order (Supabase SQL editor or `supabase db push`).
+Apply `supabase/migrations/*.sql` in order, 0001 through 0006 (Supabase SQL editor or
+`supabase db push`). **0006 is required** — without it the shared rate limiter is inert.
 
 > **Model choice matters.** Gated Hugging Face repositories such as `meta-llama/*` return
 > **403** from Featherless unless your Featherless account is linked to a verified Hugging Face
@@ -503,7 +515,7 @@ lib/
   realtime/     the subscriber hook
   auth/         RBAC
 supabase/migrations/   the schema
-tests/unit/     35 tests over the decision logic
+tests/unit/     49 tests over the decision logic
 docs/ARCHITECTURE.md   the full design of record
 ```
 
@@ -552,6 +564,14 @@ Stated plainly, because a system that overclaims is not trustworthy:
   places the pin on a map themselves; nothing is silently sent from a default coordinate.
 - **The live timeline keeps the most recent 500 events in the browser.** The full history is in
   `system_events` and every incident's complete timeline is on its detail panel.
+- **Responder accounts are not bound to units in the demo seed.** The API enforces ownership
+  whenever `profiles.responder_id` is set — a bound responder can only move their own unit and act
+  on their own assignments — but migration 0005 does not bind the demo responder account to a
+  seeded unit (units are created at runtime with generated ids). In the demo the responder console
+  therefore lets you pick which unit you are operating as. Bind `profiles.responder_id` before any
+  real use.
+- **`next@15.1.3` carries a published advisory (CVE-2025-66478).** Upgrade to a patched 15.x before
+  deploying anywhere that matters.
 - **Demo identities.** Responders, shelters and operator accounts are fictional.
 - **A hackathon prototype**, not production emergency infrastructure. It has not been reviewed,
   load-tested or certified for real emergency use.
@@ -577,7 +597,7 @@ responder mobile app with background location.
 | Innovation | Need↔Help matching with published exclusions, dynamic reprioritization, Chaos Mode |
 | User experience | Voice-first reporting, command centre, explainability panel, responder console |
 | Not static | Priorities, matches and assignments all change in response to state — `npm run verify` step 7 |
-| Engineering | 35 unit tests, typed end to end, graceful degradation on every external dependency |
+| Engineering | 49 unit tests, typed end to end, graceful degradation on every external dependency |
 | Honesty | Limitations section above; nothing is claimed that the verification script does not prove |
 
 ---

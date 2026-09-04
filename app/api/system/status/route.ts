@@ -1,5 +1,6 @@
 import { ok } from "@/lib/api/http";
 import { getProvider } from "@/lib/ai/provider";
+import { currentUser } from "@/lib/auth/rbac";
 import { admin, isConfigured } from "@/lib/supabase/admin";
 import { getConfig } from "@/lib/services/config";
 
@@ -9,7 +10,10 @@ export const dynamic = "force-dynamic";
 /** Honest system health: what is actually configured and actually working. */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const deep = url.searchParams.get("deep") === "1";
+  // A deep probe spends a real Featherless completion. Anonymous callers must
+  // not be able to burn the quota (or measure it) by hitting this in a loop.
+  const user = url.searchParams.get("deep") === "1" ? await currentUser() : null;
+  const deep = Boolean(user && (user.role === "coordinator" || user.role === "admin"));
 
   const configured = isConfigured();
   const aiConfigured = Boolean(process.env.FEATHERLESS_API_KEY);
@@ -37,8 +41,11 @@ export async function GET(req: Request) {
     }
   }
 
-  let ai: any = { configured: aiConfigured, provider: "featherless",
-                  model: process.env.FEATHERLESS_MODEL ?? null };
+  let ai: Record<string, unknown> = {
+    configured: aiConfigured,
+    provider: "featherless",
+    model: process.env.FEATHERLESS_MODEL ?? null,
+  };
   if (deep && aiConfigured) {
     const p = getProvider();
     ai = { ...ai, ...(p ? await p.health() : { ok: false, error: "provider unavailable" }) };

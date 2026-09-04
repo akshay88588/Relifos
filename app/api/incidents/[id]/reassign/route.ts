@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { fail, guardConfigured, ok, parseBody } from "@/lib/api/http";
+import { guardConfigured, ok, parseBody } from "@/lib/api/http";
 import { requireRole } from "@/lib/auth/rbac";
 import { manualAssign } from "@/lib/services/dispatchService";
 

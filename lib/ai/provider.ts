@@ -54,16 +54,30 @@ export class FeatherlessProvider implements AIProvider {
     this.fallbackModel = process.env.FEATHERLESS_MODEL_FALLBACK || this.model;
   }
 
+  /**
+   * Bounded retry ladder: at most three attempts, with backoff, and only for
+   * failures a retry could plausibly fix.
+   *
+   * A 401/403 is a credential or model-access problem and a 400 is a malformed
+   * request - repeating those just spends latency the coordinator does not
+   * have, so they fail immediately and the caller falls back. A 429 means the
+   * provider is already rate-limiting us; retrying it in a tight loop makes
+   * that worse, so it is not retried either and surfaces as a degraded
+   * assessment instead.
+   */
   async complete(req: CompletionRequest): Promise<RawCompletion> {
     const model = req.model || this.model;
     try {
       return await this.call(model, req, true);
     } catch (err) {
-      // Some models reject response_format; retry once without it, then once on
-      // the fallback model. Anything after that is a genuine provider failure.
+      if (!isRetryable(err)) throw err;
+      // Some models reject response_format; retry once without it.
       try {
+        await delay(400);
         return await this.call(model, req, false);
-      } catch {
+      } catch (err2) {
+        if (!isRetryable(err2) || this.fallbackModel === model) throw err2;
+        await delay(900);
         return await this.call(this.fallbackModel, req, false);
       }
     }
@@ -92,9 +106,10 @@ export class FeatherlessProvider implements AIProvider {
         promptTokens: res.usage?.prompt_tokens,
         completionTokens: res.usage?.completion_tokens,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const e = err as { status?: number; message?: string };
       throw new AIProviderError(
-        `Featherless call failed (${model}): ${err?.status ?? ""} ${err?.message ?? String(err)}`,
+        `Featherless call failed (${model}): ${e?.status ?? ""} ${e?.message ?? String(err)}`,
         err,
       );
     }
@@ -109,11 +124,24 @@ export class FeatherlessProvider implements AIProvider {
         maxTokens: 20,
       });
       return { ok: true, latencyMs: Date.now() - started, model: r.model };
-    } catch (err: any) {
-      return { ok: false, latencyMs: Date.now() - started, error: err?.message ?? String(err) };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, latencyMs: Date.now() - started, error: message };
     }
   }
 }
+
+/** Status codes where another identical attempt cannot help. */
+const TERMINAL_STATUS = new Set([400, 401, 403, 404, 422, 429]);
+
+function isRetryable(err: unknown): boolean {
+  const status = (err as { cause?: { status?: number }; status?: number })?.cause?.status
+    ?? (err as { status?: number })?.status;
+  if (typeof status === "number") return !TERMINAL_STATUS.has(status);
+  return true; // transport error / timeout / empty body - worth one more try
+}
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let cached: AIProvider | null = null;
 export function getProvider(): AIProvider | null {

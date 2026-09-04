@@ -27,6 +27,9 @@ export default function ReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [speechOk, setSpeechOk] = useState(false);
   const recRef = useRef<any>(null);
+  /** Sticky for the life of the draft: set the moment the mic produces text, so a
+   *  report dictated and then sent still records source="voice". */
+  const usedVoice = useRef(false);
 
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -68,7 +71,7 @@ export default function ReportPage() {
         const t = e.results[i][0].transcript;
         if (e.results[i].isFinal) final += t + " "; else partial += t;
       }
-      if (final) setText((prev) => (prev + " " + final).trim());
+      if (final) { usedVoice.current = true; setText((prev) => (prev + " " + final).trim()); }
       setInterim(partial);
     };
     rec.onerror = (e: any) => { setError(`Speech recognition: ${e.error}`); setStage("idle"); };
@@ -87,7 +90,11 @@ export default function ReportPage() {
       const res = await fetch("/api/incidents", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          description: text.trim(), lat: coords?.lat ?? null, lng: coords?.lng ?? null, source,
+          description: text.trim(),
+          lat: coords?.lat ?? null,
+          lng: coords?.lng ?? null,
+          source,
+          address_hint: addressHint.trim() || null,
         }),
       });
       const data = await res.json();
@@ -136,7 +143,7 @@ export default function ReportPage() {
 
           <textarea
             value={text + (interim ? ` ${interim}` : "")}
-            onChange={(e) => { setText(e.target.value); setInterim(""); }}
+            onChange={(e) => { usedVoice.current = false; setText(e.target.value); setInterim(""); }}
             placeholder="Water has entered our house and my parents are on the ground floor..."
             rows={5}
             className="mt-4 w-full bg-base-950 border border-white/10 rounded p-3 text-[13.5px] leading-relaxed resize-none" />
@@ -174,7 +181,7 @@ export default function ReportPage() {
 
           <div className="mt-3 flex items-center justify-end">
             <button className="btn-primary" disabled={stage === "sending"}
-              onClick={() => submit(interim || stage === "listening" ? "voice" : "text")}>
+              onClick={() => submit(usedVoice.current ? "voice" : "text")}>
               {stage === "sending" ? "Sending…" : "Send report"}
             </button>
           </div>
