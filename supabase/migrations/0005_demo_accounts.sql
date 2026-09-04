@@ -1,6 +1,8 @@
 -- ReliefOS 0005: demo operator accounts
 -- Fictional operator identities for the demonstration environment. Password for
 -- all three is 'reliefos-demo'. Change or remove these before any real use.
+-- NOTE: the domain must be a real TLD. Hosted Supabase Auth rejects reserved TLDs
+-- such as .demo / .test / .invalid with email_address_invalid.
 do $$
 declare
   v_id uuid;
@@ -8,9 +10,9 @@ declare
 begin
   for r in
     select * from (values
-      ('coordinator@reliefos.demo', 'coordinator', 'Ops Coordinator'),
-      ('responder@reliefos.demo',   'responder',   'Field Responder'),
-      ('citizen@reliefos.demo',     'citizen',     'Demo Citizen')
+      ('coordinator@reliefos.com', 'coordinator', 'Ops Coordinator'),
+      ('responder@reliefos.com',   'responder',   'Field Responder'),
+      ('citizen@reliefos.com',     'citizen',     'Demo Citizen')
     ) as t(email, role, name)
   loop
     if not exists (select 1 from auth.users u where u.email = r.email) then
@@ -37,6 +39,6 @@ begin
 end $$;
 
 update public.profiles p set role = 'coordinator', display_name = 'Ops Coordinator'
-  from auth.users u where u.id = p.id and u.email = 'coordinator@reliefos.demo';
+  from auth.users u where u.id = p.id and u.email = 'coordinator@reliefos.com';
 update public.profiles p set role = 'responder', display_name = 'Field Responder'
-  from auth.users u where u.id = p.id and u.email = 'responder@reliefos.demo';
+  from auth.users u where u.id = p.id and u.email = 'responder@reliefos.com';

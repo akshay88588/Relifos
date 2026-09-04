@@ -11,7 +11,7 @@ const schema = z.object({ description: z.string().min(4).max(1000) });
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const notReady = guardConfigured();
   if (notReady) return notReady;
-  if (!rateLimit(clientIp(req), 15)) return fail("rate_limited", "Please wait a moment", 429);
+  if (!(await rateLimit(clientIp(req), 15))) return fail("rate_limited", "Please wait a moment", 429);
 
   const { data, error } = await parseBody(req, schema);
   if (error) return error;

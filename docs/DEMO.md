@@ -3,13 +3,16 @@
 ## Before you record
 
 1. `npm run dev`, open two browser windows side by side:
-   - **A**: `/command`, signed in as `coordinator@reliefos.demo`
-   - **B**: `/responder`, signed in as `responder@reliefos.demo`
+   - **A**: `/command`, signed in as `coordinator@reliefos.com`
+   - **B**: `/responder`, signed in as `responder@reliefos.com`
 2. In window A press **Seed demo world**. Wait for the four background incidents to finish —
    each one makes real Featherless calls, so this takes 20–40 seconds.
 3. Press **Reset** and re-seed if you want a clean run. Reset deletes every simulated row.
-4. Use Chrome or Edge — voice input needs the Web Speech API.
-5. Run `npm run verify` once beforehand: if it passes, everything in the script below works.
+4. Use Chrome or Edge — voice input needs the Web Speech API. On other browsers the textarea
+   posts to the same endpoint.
+5. Keep the command centre tab open during Chaos Mode: the server owns the script but the tab
+   is what pokes it. If you close and reopen it, the scenario catches up.
+6. Run `npm run verify` once beforehand: if it passes, everything in the script below works.
 
 ## The three-minute script
 

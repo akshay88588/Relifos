@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   const notReady = guardConfigured();
   if (notReady) return notReady;
 
-  if (!rateLimit(clientIp(req), 10)) {
+  if (!(await rateLimit(clientIp(req), 10))) {
     return fail("rate_limited", "Too many reports from this address. Please wait a moment.", 429);
   }
 

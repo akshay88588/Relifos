@@ -9,6 +9,7 @@ import { EventTimeline } from "@/components/command/EventTimeline";
 import { ResponderBoard, ShelterBoard } from "@/components/command/SideBoards";
 import { ChaosControls } from "@/components/command/ChaosControls";
 import { ConnectionPill, SystemChip } from "@/components/command/StatusBar";
+import { UserChip } from "@/components/command/UserChip";
 import { IncidentDetail } from "@/components/incidents/IncidentDetail";
 
 export default function CommandCenter() {
@@ -33,6 +34,7 @@ export default function CommandCenter() {
           <SystemChip />
           <ConnectionPill connection={connection} />
           <ChaosControls state={state} onRefetch={refetch} />
+          <UserChip />
         </div>
       </header>
 

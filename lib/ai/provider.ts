@@ -50,7 +50,7 @@ export class FeatherlessProvider implements AIProvider {
       timeout: 20_000,
       maxRetries: 0,
     });
-    this.model = process.env.FEATHERLESS_MODEL || "meta-llama/Meta-Llama-3.1-8B-Instruct";
+    this.model = process.env.FEATHERLESS_MODEL || "Qwen/Qwen2.5-7B-Instruct";
     this.fallbackModel = process.env.FEATHERLESS_MODEL_FALLBACK || this.model;
   }
 

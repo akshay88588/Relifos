@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useReliefStream } from "@/lib/realtime/useReliefStream";
 import { ConnectionPill } from "@/components/command/StatusBar";
+import { UserChip } from "@/components/command/UserChip";
 import { BandChip, StatusDot } from "@/components/ui/bits";
 import { ACTIVE_ASSIGNMENT } from "@/lib/clientTypes";
 
@@ -49,7 +50,10 @@ export default function ResponderConsole() {
           <Link href="/" className="font-semibold tracking-tight">RELIEF<span className="text-emerald-400">OS</span></Link>
           <span className="label">Responder console</span>
         </div>
-        <ConnectionPill connection={connection} />
+        <div className="flex items-center gap-4">
+          <ConnectionPill connection={connection} />
+          <UserChip />
+        </div>
       </header>
 
       <div className="max-w-2xl mx-auto px-4 py-8">

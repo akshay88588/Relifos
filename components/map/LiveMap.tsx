@@ -27,7 +27,9 @@ export function LiveMap({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
-  const markers = useRef<Record<string, Marker>>({});
+  /** key -> the marker and the element it owns. The element is mutated in place,
+   *  never swapped out from under MapLibre. */
+  const markers = useRef<Record<string, { marker: Marker; el: HTMLDivElement }>>({});
   const ready = useRef(false);
 
   useEffect(() => {
@@ -59,62 +61,101 @@ export function LiveMap({
       });
       ready.current = true;
     });
-    return () => { map.current?.remove(); map.current = null; ready.current = false; };
+    return () => {
+      Object.values(markers.current).forEach((m) => m.marker.remove());
+      markers.current = {};
+      map.current?.remove();
+      map.current = null;
+      ready.current = false;
+    };
   }, []);
 
-  // Redraw markers whenever database state changes.
+  // Redraw whenever database state changes.
   useEffect(() => {
     const m = map.current;
     if (!m) return;
 
     const seen = new Set<string>();
 
-    const put = (key: string, lat: number, lng: number, el: HTMLElement) => {
+    /**
+     * Create the marker once, then only ever mutate its element. Replacing the
+     * DOM node under MapLibre (element.replaceWith) detaches the node the marker
+     * still holds a reference to, which silently kills its click handler - and
+     * during Chaos Mode that happens on every tick.
+     */
+    const put = (
+      key: string, lat: number, lng: number,
+      paint: (el: HTMLDivElement) => void,
+    ) => {
       seen.add(key);
       const existing = markers.current[key];
-      if (existing) { existing.setLngLat([lng, lat]); existing.getElement().replaceWith(el); (existing as any)._element = el; }
-      else markers.current[key] = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(m);
+      if (existing) {
+        existing.marker.setLngLat([lng, lat]);
+        paint(existing.el);
+        return;
+      }
+      const el = document.createElement("div");
+      paint(el);
+      const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(m);
+      markers.current[key] = { marker, el };
     };
 
     for (const i of incidents) {
       if (i.lat == null || i.lng == null) continue;
-      const el = document.createElement("div");
       const color = BAND_COLOR[i.priority_band] ?? "#71717a";
       const selected = selectedId === i.id;
-      el.style.cssText = `width:${selected ? 18 : 13}px;height:${selected ? 18 : 13}px;border-radius:50%;background:${color};box-shadow:0 0 0 ${selected ? 3 : 2}px rgba(255,255,255,${selected ? 0.55 : 0.18});cursor:pointer;position:relative`;
-      el.title = `${i.code} - ${i.priority_band} ${Math.round(i.priority_score)}`;
-      if (i.priority_band === "CRITICAL" && !i.resolved_at) {
-        const ring = document.createElement("div");
-        ring.className = "pulse-ring";
-        ring.style.cssText = `position:absolute;inset:0;border-radius:50%;background:${color};opacity:.5`;
-        el.appendChild(ring);
-      }
-      el.onclick = () => onSelect(i.id);
-      put(`i:${i.id}`, i.lat, i.lng, el);
+      const pulsing = i.priority_band === "CRITICAL" && !i.resolved_at;
+      put(`i:${i.id}`, i.lat, i.lng, (el) => {
+        const size = selected ? 18 : 13;
+        el.style.cssText =
+          `width:${size}px;height:${size}px;border-radius:50%;background:${color};` +
+          `box-shadow:0 0 0 ${selected ? 3 : 2}px rgba(255,255,255,${selected ? 0.55 : 0.18});` +
+          `cursor:pointer;position:relative`;
+        el.title = `${i.code} - ${i.priority_band} ${Math.round(i.priority_score)}`;
+        el.onclick = () => onSelect(i.id);
+
+        const ring = el.firstElementChild as HTMLElement | null;
+        if (pulsing && !ring) {
+          const r = document.createElement("div");
+          r.className = "pulse-ring";
+          r.style.cssText = `position:absolute;inset:0;border-radius:50%;background:${color};opacity:.5`;
+          el.appendChild(r);
+        } else if (pulsing && ring) {
+          ring.style.background = color;
+        } else if (!pulsing && ring) {
+          ring.remove();
+        }
+      });
     }
 
     for (const r of responders) {
       if (r.lat == null || r.lng == null) continue;
-      const el = document.createElement("div");
       const color = HELP_COLOR[r.type] ?? "#3b82f6";
-      const dim = r.status === "offline" ? 0.3 : 1;
-      el.style.cssText = `width:11px;height:11px;background:${color};opacity:${dim};transform:rotate(45deg);box-shadow:0 0 0 2px rgba(255,255,255,.15)`;
-      el.title = `${r.name} - ${r.status}`;
-      put(`r:${r.id}`, r.lat, r.lng, el);
+      put(`r:${r.id}`, r.lat, r.lng, (el) => {
+        el.style.cssText =
+          `width:11px;height:11px;background:${color};opacity:${r.status === "offline" ? 0.3 : 1};` +
+          `transform:rotate(45deg);box-shadow:0 0 0 2px rgba(255,255,255,.15)`;
+        el.title = `${r.name} - ${r.status}`;
+      });
     }
 
     for (const s of shelters) {
       if (s.lat == null || s.lng == null) continue;
-      const el = document.createElement("div");
       const full = s.capacity_total ? s.capacity_used / s.capacity_total : 0;
       const color = full >= 1 ? "#ef4444" : full >= 0.85 ? "#f59e0b" : "#10b981";
-      el.style.cssText = `width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid ${color};opacity:.9`;
-      el.title = `${s.name} - ${s.capacity_used}/${s.capacity_total}`;
-      put(`s:${s.id}`, s.lat, s.lng, el);
+      put(`s:${s.id}`, s.lat, s.lng, (el) => {
+        el.style.cssText =
+          `width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;` +
+          `border-bottom:12px solid ${color};opacity:.9`;
+        el.title = `${s.name} - ${s.capacity_used}/${s.capacity_total}`;
+      });
     }
 
     for (const key of Object.keys(markers.current)) {
-      if (!seen.has(key)) { markers.current[key].remove(); delete markers.current[key]; }
+      if (!seen.has(key)) {
+        markers.current[key].marker.remove();
+        delete markers.current[key];
+      }
     }
 
     if (ready.current) {

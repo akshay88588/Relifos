@@ -5,6 +5,26 @@ import type { Ev, ReliefState } from "@/lib/clientTypes";
 
 export type Connection = "connecting" | "live" | "reconnecting" | "offline";
 
+const MAX_CLIENT_EVENTS = 500;
+
+/**
+ * Merge event batches from any source into one ordered, de-duplicated list.
+ *
+ * The stream is at-least-once: an event can arrive over the socket AND come back
+ * in a REST catch-up or a state refetch, and a re-subscribe can replay. The
+ * consumer is therefore responsible for de-duplication - keying by the database
+ * row id, which is the only identifier guaranteed unique across all three paths.
+ */
+export function mergeEvents(previous: Ev[], incoming: Ev[]): Ev[] {
+  if (!incoming.length) return previous;
+  const byId = new Map<string, Ev>();
+  for (const e of previous) byId.set(e.id, e);
+  for (const e of incoming) byId.set(e.id, e);
+  return Array.from(byId.values())
+    .sort((a, b) => a.seq - b.seq)
+    .slice(-MAX_CLIENT_EVENTS);
+}
+
 /**
  * THE REALTIME CLIENT.
  *
@@ -28,6 +48,10 @@ export function useReliefStream() {
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflight = useRef(false);
 
+  const noteSeq = (list: Ev[]) => {
+    for (const e of list) if (e.seq > lastSeq.current) lastSeq.current = e.seq;
+  };
+
   const refetch = useCallback(async () => {
     if (inflight.current) return;
     inflight.current = true;
@@ -39,8 +63,9 @@ export function useReliefStream() {
       if (!res.ok) { setError(`State read failed (${res.status})`); return; }
       const data: ReliefState = await res.json();
       setState(data);
-      setEvents(data.events ?? []);
-      lastSeq.current = Math.max(lastSeq.current, ...(data.events ?? []).map((e) => e.seq), 0);
+      const incoming = data.events ?? [];
+      noteSeq(incoming);
+      setEvents((prev) => mergeEvents(prev, incoming));
       setError(null);
     } catch (err: any) {
       setError(err?.message ?? "Network error");
@@ -61,36 +86,45 @@ export function useReliefStream() {
       if (!res.ok) return;
       const { events: missed } = await res.json();
       if (missed?.length) {
-        setEvents((prev) => [...prev, ...missed].slice(-300));
-        lastSeq.current = Math.max(lastSeq.current, ...missed.map((e: Ev) => e.seq));
+        noteSeq(missed);
+        setEvents((prev) => mergeEvents(prev, missed));
       }
     } catch { /* the debounced refetch below still repairs the view */ }
   }, []);
 
   useEffect(() => {
+    let active = true;
     refetch();
+
     const supabase = supabaseBrowser();
+    // A unique topic per mount: React StrictMode mounts effects twice in
+    // development, and two channels sharing one topic deliver every insert
+    // twice. The merge above makes that harmless, but not sharing the topic
+    // keeps the socket honest too.
     const channel = supabase
-      .channel("reliefos-events")
+      .channel(`reliefos-events-${Math.random().toString(36).slice(2)}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "system_events" },
         (payload) => {
+          if (!active) return;
           const ev = payload.new as Ev;
           if (lastSeq.current && ev.seq > lastSeq.current + 1) catchUp();
-          lastSeq.current = Math.max(lastSeq.current, ev.seq);
-          setEvents((prev) => [...prev, ev].slice(-300));
+          noteSeq([ev]);
+          setEvents((prev) => mergeEvents(prev, [ev]));
           setLastEvent(ev);
           scheduleRefetch();
         },
       )
       .subscribe((status) => {
+        if (!active) return;
         if (status === "SUBSCRIBED") { setConnection("live"); catchUp(); }
         else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setConnection("reconnecting");
         else if (status === "CLOSED") setConnection("offline");
       });
 
     return () => {
+      active = false;
       if (refetchTimer.current) clearTimeout(refetchTimer.current);
       supabase.removeChannel(channel);
     };

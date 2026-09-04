@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { admin } from "@/lib/supabase/admin";
 
 export function ok(data: unknown, init?: number) {
   return NextResponse.json(data, { status: init ?? 200 });
@@ -22,21 +23,38 @@ export async function parseBody<S extends z.ZodTypeAny>(req: Request, schema: S)
 }
 
 /**
- * Token bucket per IP for the public reporting endpoint.
- * LIMITATION: in-memory, so it is per serverless instance rather than global.
- * Stated in the README rather than papered over.
+ * RATE LIMITING.
+ *
+ * Backed by a Postgres fixed-window counter (public.consume_rate_limit), so the
+ * limit is shared across every server instance rather than being per-process.
+ * A same-process memory cache short-circuits obvious floods before they reach
+ * the database, and if the database call itself fails we fall back to the
+ * in-memory window rather than either blocking or waving everything through.
  */
-const buckets = new Map<string, { tokens: number; last: number }>();
-export function rateLimit(key: string, perMinute = 10) {
+const memory = new Map<string, { count: number; windowStart: number }>();
+
+function memoryAllows(key: string, limit: number, windowMs: number) {
   const now = Date.now();
-  const b = buckets.get(key) ?? { tokens: perMinute, last: now };
-  const refill = ((now - b.last) / 60000) * perMinute;
-  b.tokens = Math.min(perMinute, b.tokens + refill);
-  b.last = now;
-  if (b.tokens < 1) { buckets.set(key, b); return false; }
-  b.tokens -= 1;
-  buckets.set(key, b);
-  return true;
+  const b = memory.get(key);
+  if (!b || now - b.windowStart >= windowMs) {
+    memory.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+  b.count += 1;
+  return b.count <= limit;
+}
+
+export async function rateLimit(key: string, perMinute = 10): Promise<boolean> {
+  if (!memoryAllows(key, perMinute, 60_000)) return false;
+  try {
+    const { data, error } = await admin().rpc("consume_rate_limit", {
+      p_key: key, p_limit: perMinute, p_window_seconds: 60,
+    });
+    if (error) return true; // memory window already allowed it
+    return data !== false;
+  } catch {
+    return true;
+  }
 }
 
 export function clientIp(req: Request) {

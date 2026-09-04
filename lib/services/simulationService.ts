@@ -161,7 +161,20 @@ export async function tickChaos() {
   const executed: string[] = [];
   let cursor = run.current_step;
 
-  while (cursor < steps.length && steps[cursor].offset_s <= elapsed) {
+  // Catch up on every step that is now due, not just the next one, so that a tab
+  // which was closed or throttled does not leave the scenario stranded - it
+  // resumes from wall-clock time on the next tick. Bounded by a wall-clock budget
+  // and a step cap so no single request approaches the serverless timeout.
+  const budgetMs = 25_000;
+  const startedAt = Date.now();
+  let ranThisTick = 0;
+
+  while (
+    cursor < steps.length &&
+    steps[cursor].offset_s <= elapsed &&
+    ranThisTick < 3 &&
+    Date.now() - startedAt < budgetMs
+  ) {
     const step = steps[cursor];
     try {
       await executeStep(step, run.id);
@@ -173,9 +186,8 @@ export async function tickChaos() {
       });
     }
     cursor++;
+    ranThisTick++;
     await admin().from("simulation_runs").update({ current_step: cursor }).eq("id", run.id);
-    // One step per tick keeps each request well inside the serverless time budget.
-    break;
   }
 
   const done = cursor >= steps.length;

@@ -11,7 +11,7 @@ config({ path: ".env.local" });
 const key = process.env.FEATHERLESS_API_KEY;
 if (!key) { console.error("FEATHERLESS_API_KEY is not set in .env.local"); process.exit(1); }
 
-const model = process.env.FEATHERLESS_MODEL || "meta-llama/Meta-Llama-3.1-8B-Instruct";
+const model = process.env.FEATHERLESS_MODEL || "Qwen/Qwen2.5-7B-Instruct";
 const client = new OpenAI({
   apiKey: key,
   baseURL: process.env.FEATHERLESS_BASE_URL || "https://api.featherless.ai/v1",
@@ -40,6 +40,7 @@ try {
 } catch (err) {
   console.error("\n\x1b[31m✗ Featherless call failed\x1b[0m");
   console.error(err.status ?? "", err.message ?? err);
-  console.error("\nIf this is a 404 on the model name, pick a model your key can access and set FEATHERLESS_MODEL in .env.local.");
+  console.error("\n403 means the model repo is GATED (e.g. meta-llama/*): either link a verified Hugging Face\naccount on your Featherless dashboard, or use an ungated model such as Qwen/Qwen2.5-7B-Instruct.");
+  console.error("404 means the model name is wrong for your account. Set FEATHERLESS_MODEL in .env.local.");
   process.exit(1);
 }

@@ -405,8 +405,9 @@ updating assignments, and pushing every change to the map and timeline.
 - **Secrets server-side only.** `FEATHERLESS_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are never
   prefixed `NEXT_PUBLIC_`. `.env.local` is gitignored; `.env.example` is committed empty.
 - **Input validation** with zod on every request body and query parameter.
-- **Rate limiting** on the public reporting endpoint (in-memory token bucket — per instance,
-  not global; see Limitations).
+- **Rate limiting** on the public reporting endpoint, backed by a Postgres fixed-window counter
+  (`consume_rate_limit`) so the limit is shared across every server instance, with an in-process
+  cache in front of it to absorb obvious floods before they reach the database.
 - **Model output is data, never instructions.** It is parsed, validated and bounded before it
   can influence anything, and never interpolated into SQL.
 
@@ -424,6 +425,7 @@ help. Every synthetic row is flagged `is_simulated`.
 npm test          # 35 unit tests: priority, matching, approval policy, AI validation
 npm run test:ai   # live Featherless call, validated against the schema
 npm run verify    # full end-to-end check against a running instance + the live database
+                  # (finds the server on ports 3000-3003; or: npm run verify -- http://localhost:3001)
 ```
 
 `npm run verify` drives the real HTTP API and then reads the database to prove each step
@@ -445,16 +447,21 @@ npm run dev                    # http://localhost:3000
 
 Apply `supabase/migrations/*.sql` in order (Supabase SQL editor or `supabase db push`).
 
+> **Model choice matters.** Gated Hugging Face repositories such as `meta-llama/*` return
+> **403** from Featherless unless your Featherless account is linked to a verified Hugging Face
+> account. `Qwen/Qwen2.5-7B-Instruct` and `mistralai/Mistral-7B-Instruct-v0.3` work immediately.
+> Verify yours with `npm run test:ai` before anything else.
+
 | Variable | Where it comes from |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | same page (publishable) |
 | `SUPABASE_SERVICE_ROLE_KEY` | same page (secret — server only) |
 | `FEATHERLESS_API_KEY` | featherless.ai account |
-| `FEATHERLESS_MODEL` | any instruct model your key can call |
+| `FEATHERLESS_MODEL` | an **ungated** instruct model, e.g. `Qwen/Qwen2.5-7B-Instruct` |
 
 Demo accounts (created by migration 0005, password `reliefos-demo`):
-`coordinator@reliefos.demo` · `responder@reliefos.demo` · `citizen@reliefos.demo`
+`coordinator@reliefos.com` · `responder@reliefos.com` · `citizen@reliefos.com`
 
 Then: sign in as the coordinator → **Seed demo world** → report an emergency at `/report` →
 approve the dispatch → **Start Chaos Mode**.
@@ -534,10 +541,17 @@ Stated plainly, because a system that overclaims is not trustworthy:
 - **ETAs are straight-line estimates**, not routed. No routing provider is integrated, and every
   ETA is labelled "est., straight-line" in the UI.
 - **Chaos Mode is ticked by the browser** because serverless has no durable timer. The server
-  owns the script and performs every state change.
+  owns the script, decides which steps are due from wall-clock time, and performs every state
+  change; if the tab is closed and reopened the scenario catches up on the steps it missed
+  rather than stalling. It does not advance while no tab is open.
 - **The reconciler is synchronous**, so a very large cascade would slow the originating request.
-- **Browser speech recognition is Chrome/Edge only.** Text is the fallback everywhere else.
-- **Rate limiting is per instance**, being in-memory rather than backed by a shared store.
+- **Browser speech recognition is Chrome/Edge only.** Firefox and iOS Safari fall back to the
+  textarea, which posts to the same endpoint. There is no server-side audio transcription:
+  Featherless serves text models, so adding it would mean a second provider.
+- **Geolocation is reporter-controlled.** If the browser refuses or mislocates, the reporter
+  places the pin on a map themselves; nothing is silently sent from a default coordinate.
+- **The live timeline keeps the most recent 500 events in the browser.** The full history is in
+  `system_events` and every incident's complete timeline is on its detail panel.
 - **Demo identities.** Responders, shelters and operator accounts are fictional.
 - **A hackathon prototype**, not production emergency infrastructure. It has not been reviewed,
   load-tested or certified for real emergency use.

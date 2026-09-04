@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { LocationPicker } from "@/components/map/LocationPicker";
 
 type Stage = "idle" | "listening" | "sending" | "done" | "error";
 
@@ -20,6 +21,8 @@ export default function ReportPage() {
   const [text, setText] = useState("");
   const [interim, setInterim] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locSource, setLocSource] = useState<"pending" | "gps" | "manual" | "unavailable">("pending");
+  const [addressHint, setAddressHint] = useState("");
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [speechOk, setSpeechOk] = useState(false);
@@ -28,12 +31,27 @@ export default function ReportPage() {
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     setSpeechOk(Boolean(SR));
-    navigator.geolocation?.getCurrentPosition(
-      (p) => setCoords({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => setCoords({ lat: 17.4718, lng: 78.666 }), // Ghatkesar demo fallback
-      { timeout: 6000 },
-    );
+    locate();
   }, []);
+
+  function locate() {
+    if (!navigator.geolocation) {
+      setLocSource("unavailable");
+      setCoords((c) => c ?? { lat: 17.4718, lng: 78.666 });
+      return;
+    }
+    setLocSource("pending");
+    navigator.geolocation.getCurrentPosition(
+      (p) => { setCoords({ lat: p.coords.latitude, lng: p.coords.longitude }); setLocSource("gps"); },
+      () => {
+        // Refused or timed out. Do NOT silently pretend we know where they are -
+        // seed the map at the operating area and ask them to place the pin.
+        setCoords((c) => c ?? { lat: 17.4718, lng: 78.666 });
+        setLocSource("unavailable");
+      },
+      { timeout: 8000, enableHighAccuracy: true },
+    );
+  }
 
   function toggleListen() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -123,8 +141,38 @@ export default function ReportPage() {
             rows={5}
             className="mt-4 w-full bg-base-950 border border-white/10 rounded p-3 text-[13.5px] leading-relaxed resize-none" />
 
-          <div className="mt-2 flex items-center justify-between text-[11.5px] text-zinc-500">
-            <span>{coords ? `Location ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : "Locating…"}</span>
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="label">Where is help needed?</span>
+              <button onClick={locate} className="text-[11px] text-zinc-400 hover:text-zinc-200 underline">
+                Use my location
+              </button>
+            </div>
+            <LocationPicker
+              lat={coords?.lat ?? null}
+              lng={coords?.lng ?? null}
+              onChange={(c) => { setCoords(c); setLocSource("manual"); }}
+            />
+            <div className="mt-1.5 text-[11.5px] text-zinc-500">
+              {locSource === "pending" && "Finding your location…"}
+              {locSource === "gps" && "Located from your device. Drag the pin if it is not exact."}
+              {locSource === "manual" && "Pin placed by you."}
+              {locSource === "unavailable" &&
+                "We could not get your location — tap the map or drag the pin to the right place."}
+              {coords && (
+                <span className="font-mono text-zinc-600">
+                  {" "}{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+                </span>
+              )}
+            </div>
+            <input
+              value={addressHint}
+              onChange={(e) => setAddressHint(e.target.value)}
+              placeholder="Landmark or address (optional) — e.g. behind the bus stop, second lane"
+              className="mt-2 w-full bg-base-950 border border-white/10 rounded px-2.5 py-1.5 text-[12.5px]" />
+          </div>
+
+          <div className="mt-3 flex items-center justify-end">
             <button className="btn-primary" disabled={stage === "sending"}
               onClick={() => submit(interim || stage === "listening" ? "voice" : "text")}>
               {stage === "sending" ? "Sending…" : "Send report"}

@@ -14,7 +14,6 @@ import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-const BASE = process.env.VERIFY_BASE_URL || "http://localhost:3000";
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -31,6 +30,31 @@ if (!URL_ || !ANON || !SERVICE) {
 
 const db = createClient(URL_, SERVICE, { auth: { persistSession: false } });
 const anon = createClient(URL_, ANON, { auth: { persistSession: false } });
+
+/**
+ * Find the running dev server. Next.js moves to 3001, 3002... when 3000 is taken,
+ * so probe the usual ports instead of assuming. Override with VERIFY_BASE_URL or
+ * by passing a base URL as the first argument.
+ */
+async function resolveBase() {
+  const explicit = process.argv[2] || process.env.VERIFY_BASE_URL;
+  const candidates = explicit ? [explicit]
+    : ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003"];
+  for (const base of candidates) {
+    try {
+      const res = await fetch(`${base}/api/system/status`, { signal: AbortSignal.timeout(2500) });
+      if (res.ok) return base;
+    } catch { /* try the next port */ }
+  }
+  return null;
+}
+
+const BASE = await resolveBase();
+if (!BASE) {
+  console.error("Could not find a running ReliefOS server on ports 3000-3003.");
+  console.error("Start it with `npm run dev`, or pass the URL: npm run verify -- http://localhost:3001");
+  process.exit(1);
+}
 
 const api = async (path, opts = {}, token) => {
   const res = await fetch(`${BASE}${path}`, {
