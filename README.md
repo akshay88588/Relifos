@@ -570,8 +570,6 @@ Stated plainly, because a system that overclaims is not trustworthy:
   seeded unit (units are created at runtime with generated ids). In the demo the responder console
   therefore lets you pick which unit you are operating as. Bind `profiles.responder_id` before any
   real use.
-- **`next@15.1.3` carries a published advisory (CVE-2025-66478).** Upgrade to a patched 15.x before
-  deploying anywhere that matters.
 - **Demo identities.** Responders, shelters and operator accounts are fictional.
 - **A hackathon prototype**, not production emergency infrastructure. It has not been reviewed,
   load-tested or certified for real emergency use.
