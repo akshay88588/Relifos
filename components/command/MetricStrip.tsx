@@ -1,30 +1,60 @@
 "use client";
 import type { Incident, Responder, Shelter } from "@/lib/clientTypes";
 
+/**
+ * The five numbers an operator must be able to read in one glance. Anything
+ * that is zero stays quiet; anything that demands attention is coloured AND
+ * carries a word, so urgency never depends on colour alone.
+ */
 export function MetricStrip({ incidents, responders, shelters }: {
   incidents: Incident[]; responders: Responder[]; shelters: Shelter[];
 }) {
   const open = incidents.filter((i) => !["resolved", "cancelled"].includes(i.status));
   const critical = open.filter((i) => i.priority_band === "CRITICAL").length;
   const awaiting = open.filter((i) => i.status === "awaiting_approval").length;
-  const available = responders.filter((r) => r.status === "available" && r.current_load < r.max_concurrent).length;
+  const free = responders.filter((r) => r.status === "available" && r.current_load < r.max_concurrent).length;
   const capTotal = shelters.reduce((s, x) => s + x.capacity_total, 0);
   const capUsed = shelters.reduce((s, x) => s + x.capacity_used, 0);
+  const shelterPct = capTotal ? Math.round((capUsed / capTotal) * 100) : null;
 
   const items = [
-    { k: "Active incidents", v: open.length, tone: "text-zinc-100" },
-    { k: "Critical", v: critical, tone: critical ? "text-red-400" : "text-zinc-100" },
-    { k: "Awaiting approval", v: awaiting, tone: awaiting ? "text-amber-400" : "text-zinc-100" },
-    { k: "Responders free", v: `${available}/${responders.length}`, tone: available ? "text-emerald-400" : "text-red-400" },
-    { k: "Shelter load", v: capTotal ? `${Math.round((capUsed / capTotal) * 100)}%` : "-", tone: "text-zinc-100" },
+    { k: "Active incidents", v: open.length, note: null, tone: "text-ink-primary" },
+    {
+      k: "Critical", v: critical,
+      note: critical ? "needs attention" : "none",
+      tone: critical ? "pri-CRITICAL" : "text-ink-primary",
+    },
+    {
+      k: "Awaiting approval", v: awaiting,
+      note: awaiting ? "action required" : "clear",
+      tone: awaiting ? "pri-HIGH" : "text-ink-primary",
+    },
+    {
+      k: "Responders free", v: `${free}/${responders.length}`,
+      note: responders.length === 0 ? "not seeded" : free === 0 ? "none available" : null,
+      tone: responders.length && free === 0 ? "pri-CRITICAL" : "text-ink-primary",
+    },
+    {
+      k: "Shelter load", v: shelterPct == null ? "—" : `${shelterPct}%`,
+      note: shelterPct != null && shelterPct >= 85 ? "near capacity" : null,
+      tone: shelterPct != null && shelterPct >= 85 ? "pri-HIGH" : "text-ink-primary",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-white/[0.07] border-y border-white/[0.07]">
+    <div
+      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px shrink-0"
+      style={{ background: "var(--border-subtle)", borderBlock: "1px solid var(--border-subtle)" }}
+      role="group"
+      aria-label="Operational summary"
+    >
       {items.map((i) => (
-        <div key={i.k} className="bg-base-950 px-3 py-2">
-          <div className="label">{i.k}</div>
-          <div className={`text-xl font-semibold leading-tight ${i.tone}`}>{i.v}</div>
+        <div key={i.k} className="px-3 py-2" style={{ background: "var(--surface-base)" }}>
+          <div className="label truncate">{i.k}</div>
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <span className={`metric ${i.tone}`}>{i.v}</span>
+            {i.note && <span className={`text-[10px] ${i.tone} opacity-80 truncate`}>{i.note}</span>}
+          </div>
         </div>
       ))}
     </div>

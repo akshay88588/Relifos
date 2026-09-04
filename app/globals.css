@@ -2,66 +2,310 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+/* ============================================================
+   RELIEFOS DESIGN SYSTEM
+   One source of truth for surface, text, priority and status.
+   Components reference tokens, never raw hex values.
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Surfaces: four levels, low contrast between them so that
+         DATA is what stands out, not the furniture. --- */
+  --surface-sunken:  #070709;
+  --surface-base:    #0a0a0c;
+  --surface-raised:  #101013;
+  --surface-overlay: #16161a;
+  --surface-hover:   rgba(255, 255, 255, 0.035);
+  --surface-active:  rgba(255, 255, 255, 0.06);
+
+  /* --- Borders --- */
+  --border-subtle:  rgba(255, 255, 255, 0.055);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong:  rgba(255, 255, 255, 0.17);
+
+  /* --- Text: four steps, deliberate. --- */
+  --text-primary:   #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-tertiary:  #71717a;
+  --text-faint:     #52525b;
+
+  /* --- Priority. Semantic, never decorative. Always paired with a
+         shape and a text label so colour is never the sole signal. --- */
+  --p-critical:     #ff4d4f;
+  --p-critical-bg:  rgba(255, 77, 79, 0.13);
+  --p-critical-bd:  rgba(255, 77, 79, 0.42);
+  --p-high:         #ff9138;
+  --p-high-bg:      rgba(255, 145, 56, 0.13);
+  --p-high-bd:      rgba(255, 145, 56, 0.40);
+  --p-medium:       #f0c44c;
+  --p-medium-bg:    rgba(240, 196, 76, 0.13);
+  --p-medium-bd:    rgba(240, 196, 76, 0.38);
+  --p-low:          #34d399;
+  --p-low-bg:       rgba(52, 211, 153, 0.12);
+  --p-low-bd:       rgba(52, 211, 153, 0.34);
+
+  /* --- Operational status --- */
+  --st-available: #34d399;
+  --st-enroute:   #60a5fa;
+  --st-onscene:   #a78bfa;
+  --st-busy:      #fbbf24;
+  --st-offline:   #52525b;
+
+  /* --- Accent / intent --- */
+  --accent:        #10b981;
+  --accent-hover:  #34d399;
+  --accent-quiet:  rgba(16, 185, 129, 0.12);
+  --danger:        #ef4444;
+  --danger-hover:  #f87171;
+  --info:          #60a5fa;
+  --warn:          #fbbf24;
+
+  /* --- Radius --- */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+
+  /* --- Elevation. Depth, not glass. --- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.65);
+
+  /* --- Motion. Every duration flows from these. --- */
+  --dur-fast:  120ms;
+  --dur-base:  200ms;
+  --dur-slow:  320ms;
+  --ease: cubic-bezier(0.2, 0, 0.1, 1);
+}
 
 html, body {
-  background: #09090b;
-  color: #e4e4e7;
+  background: var(--surface-base);
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Operations console: dense, quiet, high contrast where it matters. */
+/* Never let a page scroll sideways. */
+html, body { max-width: 100%; overflow-x: hidden; }
+
+/* Visible, consistent focus for keyboard users only. */
+:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+:focus:not(:focus-visible) { outline: none; }
+
 @layer components {
-  .panel { @apply bg-base-900 border border-white/[0.07] rounded-md; }
-  .panel-head { @apply px-3 py-2 border-b border-white/[0.07] text-[11px] uppercase tracking-[0.12em] text-zinc-500 flex items-center justify-between; }
-  .btn { @apply px-3 py-1.5 rounded text-[13px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed; }
-  .btn-primary { @apply btn bg-emerald-600 hover:bg-emerald-500 text-white; }
-  .btn-danger { @apply btn bg-red-600/90 hover:bg-red-500 text-white; }
-  .btn-ghost { @apply btn bg-white/5 hover:bg-white/10 text-zinc-300; }
-  .chip { @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold; }
-  .label { @apply text-[10px] uppercase tracking-[0.14em] text-zinc-500; }
-  .kv { @apply text-[13px] text-zinc-200; }
+  /* ---------- Surfaces ---------- */
+  .panel {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--r-lg);
+  }
+  .panel-head {
+    @apply px-3 py-2 flex items-center justify-between gap-2 shrink-0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-tertiary);
+    font-weight: 600;
+  }
+
+  /* ---------- Typography roles ---------- */
+  .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-tertiary);
+    font-weight: 600;
+  }
+  .metric { @apply text-2xl font-semibold leading-none tracking-tight; }
+  .mono { font-family: theme('fontFamily.mono'); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Buttons. 44px min touch target on coarse pointers. ---------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md font-medium;
+    @apply px-3 py-1.5 text-[13px];
+    transition: background-color var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                color var(--dur-fast) var(--ease),
+                transform var(--dur-fast) var(--ease);
+    border: 1px solid transparent;
+    min-height: 32px;
+  }
+  .btn:active:not(:disabled) { transform: translateY(0.5px); }
+  .btn:disabled { opacity: 0.42; cursor: not-allowed; }
+
+  .btn-primary { @apply btn; background: var(--accent); color: #04140d; font-weight: 600; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+  .btn-danger { @apply btn; background: var(--danger); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: var(--danger-hover); }
+
+  .btn-ghost {
+    @apply btn;
+    background: var(--surface-hover);
+    border-color: var(--border-default);
+    color: var(--text-secondary);
+  }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface-active); color: var(--text-primary); }
+
+  .btn-sm { @apply px-2 py-0.5 text-[11px]; min-height: 24px; }
+
+  @media (pointer: coarse) {
+    .btn { min-height: 44px; @apply px-4 text-[14px]; }
+    .btn-sm { min-height: 36px; }
+  }
+
+  /* ---------- Inputs ---------- */
+  .field {
+    @apply w-full rounded-md px-2.5 py-2 text-[13px];
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    color: var(--text-primary);
+    transition: border-color var(--dur-fast) var(--ease);
+  }
+  .field::placeholder { color: var(--text-faint); }
+  .field:hover { border-color: var(--border-strong); }
+  @media (pointer: coarse) {
+    /* 16px prevents iOS Safari from zooming the viewport on focus. */
+    .field { font-size: 16px; padding-top: 10px; padding-bottom: 10px; }
+  }
+
+  /* ---------- Chips / badges ---------- */
+  .chip {
+    @apply inline-flex items-center gap-1 rounded px-1.5 py-0.5;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .chip-neutral { background: var(--surface-active); color: var(--text-secondary); }
+
+  /* ---------- Scrollbars ---------- */
+  .scroll-y { @apply overflow-y-auto; scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
+  .scroll-y::-webkit-scrollbar { width: 7px; height: 7px; }
+  .scroll-y::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+  .scroll-y::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------- Skip link ---------- */
+  .skip-link {
+    @apply absolute left-3 z-50 px-3 py-2 rounded-md text-[13px] font-medium;
+    top: -100px;
+    background: var(--accent);
+    color: #04140d;
+    transition: top var(--dur-base) var(--ease);
+  }
+  .skip-link:focus { top: 12px; }
 }
 
-.band-CRITICAL { color: #ef4444; }
-.band-HIGH { color: #f97316; }
-.band-MEDIUM { color: #eab308; }
-.band-LOW { color: #22c55e; }
-.bg-band-CRITICAL { background-color: #ef4444; }
-.bg-band-HIGH { background-color: #f97316; }
-.bg-band-MEDIUM { background-color: #eab308; }
-.bg-band-LOW { background-color: #22c55e; }
+/* ============================================================
+   PRIORITY UTILITIES
+   ============================================================ */
+.pri-CRITICAL { color: var(--p-critical); }
+.pri-HIGH     { color: var(--p-high); }
+.pri-MEDIUM   { color: var(--p-medium); }
+.pri-LOW      { color: var(--p-low); }
 
+.pri-bg-CRITICAL { background: var(--p-critical-bg); color: var(--p-critical); border: 1px solid var(--p-critical-bd); }
+.pri-bg-HIGH     { background: var(--p-high-bg);     color: var(--p-high);     border: 1px solid var(--p-high-bd); }
+.pri-bg-MEDIUM   { background: var(--p-medium-bg);   color: var(--p-medium);   border: 1px solid var(--p-medium-bd); }
+.pri-bg-LOW      { background: var(--p-low-bg);      color: var(--p-low);      border: 1px solid var(--p-low-bd); }
+
+.pri-rail-CRITICAL { box-shadow: inset 3px 0 0 var(--p-critical); }
+.pri-rail-HIGH     { box-shadow: inset 3px 0 0 var(--p-high); }
+.pri-rail-MEDIUM   { box-shadow: inset 3px 0 0 var(--p-medium); }
+.pri-rail-LOW      { box-shadow: inset 3px 0 0 var(--p-low); }
+
+/* ============================================================
+   MOTION
+   Every animation below communicates a state change. None are
+   decorative, and all of them stop under prefers-reduced-motion.
+   ============================================================ */
 @keyframes pulse-ring {
-  0% { transform: scale(0.6); opacity: 0.9; }
-  100% { transform: scale(2.4); opacity: 0; }
+  0%   { transform: scale(0.65); opacity: 0.85; }
+  100% { transform: scale(2.5);  opacity: 0; }
 }
-.pulse-ring { animation: pulse-ring 1.6s ease-out infinite; }
+.pulse-ring { animation: pulse-ring 1.8s ease-out infinite; }
 
 @keyframes row-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.row-in { animation: row-in 260ms ease-out; }
+.row-in { animation: row-in var(--dur-slow) var(--ease); }
 
-.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
-.scrollbar-thin::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+@keyframes flash-in {
+  0%   { background-color: var(--accent-quiet); }
+  100% { background-color: transparent; }
+}
+.flash-in { animation: flash-in 1.1s var(--ease); }
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--surface-raised) 25%, var(--surface-overlay) 50%, var(--surface-raised) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--r-sm);
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 700ms linear infinite; }
+
+@keyframes live-dot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+.live-dot { animation: live-dot 2s ease-in-out infinite; }
+
+@keyframes sheet-up {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.sheet-up { animation: sheet-up var(--dur-base) var(--ease); }
+
+/* A user who asks for less motion gets the full product, minus motion.
+   Nothing is hidden, nothing is delayed - transitions simply resolve. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .pulse-ring { display: none; }
+  .skeleton { animation: none; background: var(--surface-overlay); }
+}
+
+/* ============================================================
+   MAPLIBRE
+   ============================================================ */
+.maplibregl-map { width: 100% !important; height: 100% !important; position: absolute; inset: 0; }
+.maplibregl-canvas-container, .maplibregl-canvas { width: 100% !important; height: 100% !important; display: block; }
 .maplibregl-ctrl-attrib { font-size: 9px; }
-
-/* Ensure MapLibre WebGL canvas fills 100% of its container */
-.maplibregl-map {
-  width: 100% !important;
-  height: 100% !important;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
+.maplibregl-ctrl-attrib.maplibregl-compact { background: rgba(10, 10, 12, 0.82); }
+.maplibregl-ctrl-attrib a { color: var(--text-tertiary); }
+.maplibregl-ctrl-group {
+  background: var(--surface-overlay) !important;
+  border: 1px solid var(--border-default) !important;
+  box-shadow: var(--shadow-md) !important;
 }
-.maplibregl-canvas-container,
-.maplibregl-canvas {
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
-}
+.maplibregl-ctrl-group button + button { border-top: 1px solid var(--border-subtle) !important; }
+.maplibregl-ctrl-group button span { filter: invert(1) opacity(0.7); }
+.maplibregl-ctrl-group button:hover { background: var(--surface-active) !important; }
 
+/* Markers must be reachable by keyboard, and show where focus is. */
+.rp-marker { cursor: pointer; }
+.rp-marker:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+@supports (padding: max(0px)) {
+  .safe-b { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+}

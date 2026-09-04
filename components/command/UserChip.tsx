@@ -6,10 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 
 interface Me { id: string; email: string | null; role: string; display_name: string }
 
-/**
- * Shows who is signed in and lets them leave. Without this the only way to switch
- * between the coordinator and responder accounts was to clear cookies by hand.
- */
+/** Shows who is signed in, with their role, and lets them leave. */
 export function UserChip() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
@@ -27,25 +24,22 @@ export function UserChip() {
 
   async function signOut() {
     setBusy(true);
-    try { await supabaseBrowser().auth.signOut(); } catch { /* cookie is cleared below anyway */ }
+    try { await supabaseBrowser().auth.signOut(); } catch { /* cookie is cleared by the redirect anyway */ }
     router.push("/login");
     router.refresh();
   }
 
-  if (!loaded) return null;
+  if (!loaded) return <div className="skeleton h-6 w-20 rounded" aria-hidden="true" />;
 
-  if (!me) {
-    return <Link href="/login" className="btn-ghost !py-1 text-[11.5px]">Sign in</Link>;
-  }
+  if (!me) return <Link href="/login" className="btn-ghost btn-sm">Sign in</Link>;
 
   return (
     <div className="flex items-center gap-2">
       <div className="text-right leading-tight hidden sm:block">
-        <div className="text-[11.5px] text-zinc-300">{me.display_name}</div>
-        <div className="text-[10px] uppercase tracking-wider text-zinc-500">{me.role}</div>
+        <div className="text-[11.5px] text-ink-secondary truncate max-w-[130px]">{me.display_name}</div>
+        <div className="text-[10px] uppercase tracking-wider text-ink-faint">{me.role}</div>
       </div>
-      <button onClick={signOut} disabled={busy}
-        className="btn-ghost !py-1 text-[11.5px]" title={me.email ?? undefined}>
+      <button onClick={signOut} disabled={busy} className="btn-ghost btn-sm" title={me.email ?? undefined}>
         {busy ? "…" : "Sign out"}
       </button>
     </div>

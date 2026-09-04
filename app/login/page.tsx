@@ -1,57 +1,85 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { Spinner, WarnIcon } from "@/components/ui/bits";
 
 const DEMO = [
-  { label: "Coordinator", email: "coordinator@reliefos.com", to: "/command" },
-  { label: "Responder", email: "responder@reliefos.com", to: "/responder" },
+  { label: "Coordinator", email: "coordinator@reliefos.com", to: "/command", note: "Approve dispatches, run Chaos Mode" },
+  { label: "Responder", email: "responder@reliefos.com", to: "/responder", note: "Accept assignments, change status" },
 ];
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("coordinator@reliefos.com");
   const [password, setPassword] = useState("reliefos-demo");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function signIn(to: string) {
-    setBusy(true); setError(null);
-    const { error } = await supabaseBrowser().auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) { setError(error.message); return; }
+  async function signIn(to: string, withEmail = email, withPassword = password) {
+    setBusy(to); setError(null);
+    const { error: err } = await supabaseBrowser().auth.signInWithPassword({
+      email: withEmail, password: withPassword,
+    });
+    if (err) { setError(err.message); setBusy(null); return; }
     router.push(to);
     router.refresh();
   }
 
   return (
-    <main className="min-h-screen grid place-items-center px-6">
-      <div className="panel p-6 w-full max-w-sm">
-        <div className="text-lg font-semibold tracking-tight mb-1">
-          RELIEF<span className="text-emerald-400">OS</span>
-        </div>
-        <p className="text-[12px] text-zinc-500 mb-5">Sign in to the coordination system.</p>
+    <main id="main" className="min-h-[100dvh] grid place-items-center px-5 py-10">
+      <div className="w-full max-w-sm">
+        <Link href="/" className="text-lg font-semibold tracking-tight block mb-1">
+          RELIEF<span style={{ color: "var(--accent-hover)" }}>OS</span>
+        </Link>
+        <h1 className="text-[15px] font-semibold text-ink-primary">Sign in</h1>
+        <p className="text-[12px] text-ink-tertiary mb-5 mt-0.5">Sign in to the coordination system.</p>
 
-        <label className="label">Email</label>
-        <input value={email} onChange={(e) => setEmail(e.target.value)}
-          className="w-full mt-1 mb-3 bg-base-950 border border-white/10 rounded px-2.5 py-2 text-[13px]" />
-        <label className="label">Password</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-          className="w-full mt-1 mb-4 bg-base-950 border border-white/10 rounded px-2.5 py-2 text-[13px]" />
+        <form
+          className="panel p-5"
+          onSubmit={(e) => { e.preventDefault(); signIn("/command"); }}
+        >
+          <label className="label block mb-1" htmlFor="email">Email</label>
+          <input id="email" type="email" autoComplete="username" required
+            value={email} onChange={(e) => setEmail(e.target.value)} className="field mb-3" />
 
-        {error && <div className="mb-3 text-[12px] text-red-400">{error}</div>}
+          <label className="label block mb-1" htmlFor="password">Password</label>
+          <input id="password" type="password" autoComplete="current-password" required
+            value={password} onChange={(e) => setPassword(e.target.value)} className="field mb-4" />
 
-        <button className="btn-primary w-full" disabled={busy} onClick={() => signIn("/command")}>
-          {busy ? "Signing in..." : "Sign in"}
-        </button>
+          {error && (
+            <p className="mb-3 text-[12px] flex items-start gap-1.5" role="alert" style={{ color: "var(--danger)" }}>
+              <span className="mt-px shrink-0"><WarnIcon /></span>{error}
+            </p>
+          )}
 
-        <div className="mt-5 pt-4 border-t border-white/[0.07]">
-          <div className="label mb-2">Demo accounts</div>
+          <button type="submit" className="btn-primary w-full" disabled={!!busy}>
+            {busy === "/command" ? <><Spinner /> Signing in…</> : "Sign in"}
+          </button>
+        </form>
+
+        <div className="mt-5 panel p-4">
+          <h2 className="label mb-2">Demo accounts</h2>
+          <p className="text-[11.5px] text-ink-faint mb-2.5 leading-relaxed">
+            Fictional operator identities for the demonstration environment.
+          </p>
           {DEMO.map((d) => (
-            <button key={d.email} disabled={busy}
-              onClick={() => { setEmail(d.email); setPassword("reliefos-demo"); signIn(d.to); }}
-              className="btn-ghost w-full mb-2 text-left">
-              {d.label} <span className="text-zinc-500">- {d.email}</span>
+            <button
+              key={d.email}
+              disabled={!!busy}
+              onClick={() => {
+                setEmail(d.email); setPassword("reliefos-demo");
+                signIn(d.to, d.email, "reliefos-demo");
+              }}
+              className="btn-ghost w-full mb-2 !justify-start text-left !py-2"
+            >
+              <span className="flex flex-col items-start gap-0.5 min-w-0">
+                <span className="text-ink-primary text-[13px]">
+                  {busy === d.to ? "Signing in…" : d.label}
+                </span>
+                <span className="text-[10.5px] text-ink-faint truncate">{d.note}</span>
+              </span>
             </button>
           ))}
         </div>
