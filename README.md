@@ -489,7 +489,7 @@ approve the dispatch → **Start Chaos Mode**.
 | Method | Route | Role | Emits |
 |---|---|---|---|
 | POST | `/api/incidents` | public (rate-limited) | `incident.created`, `ai.assessment_created`, `incident.priority_changed`, `match.created` |
-| POST | `/api/incidents/:id/updates` | public | `incident.updated`, `incident.priority_changed` |
+| POST | `/api/incidents/:id/updates` | reporter token, owning session, or staff | `incident.updated`, `incident.priority_changed` |
 | GET | `/api/incidents/:id` | staff | — |
 | POST | `/api/incidents/:id/rematch` \| `/resolve` \| `/reassign` | coordinator | `match.created`, `incident.resolved`, `assignment.created` |
 | POST | `/api/assignments/:id/approve` | coordinator | `assignment.created`, `responder.status_changed` |
@@ -499,6 +499,8 @@ approve the dispatch → **Start Chaos Mode**.
 | PATCH | `/api/shelters/:id/capacity` | coordinator | `shelter.capacity_changed` |
 | POST | `/api/simulation/{seed,chaos/start,chaos/tick,chaos/stop,reset}` | coordinator | `simulation.step_executed` |
 | GET | `/api/state` · `/api/events?after_seq=` · `/api/system/status` | staff | — |
+| GET | `/api/me` | any signed-in session | — |
+| POST | `/api/system/tick` | coordinator | `incident.priority_changed` |
 
 Auth accepts a Supabase session cookie or an `Authorization: Bearer <access_token>` header.
 
@@ -568,12 +570,11 @@ Stated plainly, because a system that overclaims is not trustworthy:
   places the pin on a map themselves; nothing is silently sent from a default coordinate.
 - **The live timeline keeps the most recent 500 events in the browser.** The full history is in
   `system_events` and every incident's complete timeline is on its detail panel.
-- **Responder accounts are not bound to units in the demo seed.** The API enforces ownership
-  whenever `profiles.responder_id` is set — a bound responder can only move their own unit and act
-  on their own assignments — but migration 0005 does not bind the demo responder account to a
-  seeded unit (units are created at runtime with generated ids). In the demo the responder console
-  therefore lets you pick which unit you are operating as. Bind `profiles.responder_id` before any
-  real use.
+- **Responder accounts are bound to a single unit.** Migration 0007 binds the demo responder
+  account to a seeded unit, and the API is fail-closed: a responder whose `profiles.responder_id`
+  is unset is refused rather than waved through, and a bound responder can only move their own unit
+  and act on their own assignments. Coordinators keep the override. Provisioning any new responder
+  account must set `profiles.responder_id`.
 - **Demo identities.** Responders, shelters and operator accounts are fictional.
 - **A hackathon prototype**, not production emergency infrastructure. It has not been reviewed,
   load-tested or certified for real emergency use.
