@@ -8,6 +8,8 @@ import {
   EmptyState, LoadingState, PriorityBadge, Spinner, StatusDot, StatusPill, WarnIcon,
 } from "@/components/ui/bits";
 import { ACTIVE_ASSIGNMENT } from "@/lib/clientTypes";
+import type { Assignment, Incident, Responder } from "@/lib/clientTypes";
+import { haversineKm } from "@/lib/domain/geo";
 
 const STATUSES = ["available", "busy", "offline"] as const;
 
@@ -220,6 +222,11 @@ export default function ResponderConsole() {
                 />
               </div>
             )}
+
+            <ShiftHistory unit={unit} assignments={state?.assignments ?? []}
+                          incidents={state?.incidents ?? []} />
+            <EligibleNearby unit={unit} incidents={state?.incidents ?? []}
+                            assignments={state?.assignments ?? []} />
           </>
         )}
 
@@ -231,5 +238,119 @@ export default function ResponderConsole() {
         )}
       </main>
     </div>
+  );
+}
+
+/**
+ * What this unit has already handled this session. Read straight off the same
+ * shared state the command centre uses, so the two can never disagree.
+ */
+function ShiftHistory({ unit, assignments, incidents }: {
+  unit: Responder; assignments: Assignment[]; incidents: Incident[];
+}) {
+  const mine = assignments
+    .filter((a) => a.responder_id === unit.id)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .slice(0, 8);
+  const codeOf = (id: string) => incidents.find((i) => i.id === id)?.code ?? "incident";
+
+  return (
+    <section aria-label="Your assignments this session" className="mt-3 panel">
+      <header className="panel-head"><span>This shift</span>
+        <span className="text-ink-faint font-normal normal-case tracking-normal tabular-nums">
+          {mine.length}
+        </span>
+      </header>
+      {mine.length === 0 ? (
+        <p className="p-3 text-[12px] text-ink-faint">
+          Nothing assigned to this unit yet.
+        </p>
+      ) : (
+        <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+          {mine.map((a) => (
+            <li key={a.id} className="px-3 py-2 flex items-center justify-between gap-2">
+              <span className="font-mono text-[12px] text-ink-secondary">{codeOf(a.incident_id)}</span>
+              <span className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-ink-faint tabular-nums">
+                  match {Math.round(a.match_score)}
+                </span>
+                <StatusPill status={a.status} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Open incidents this unit could serve, nearest first.
+ *
+ * READ-ONLY BY DESIGN. There is no accept or claim control here: a dispatch
+ * still has to be recommended by the matching engine and approved by a
+ * coordinator. This exists so a responder can see what is happening around
+ * them, not so they can pick their own job.
+ */
+function EligibleNearby({ unit, incidents, assignments }: {
+  unit: Responder; incidents: Incident[]; assignments: Assignment[];
+}) {
+  const taken = new Set(
+    assignments
+      .filter((a) => ACTIVE_ASSIGNMENT.includes(a.status))
+      .map((a) => a.incident_id),
+  );
+
+  const nearby = incidents
+    .filter((i) =>
+      !["resolved", "cancelled"].includes(i.status) &&
+      !taken.has(i.id) &&
+      (i.required_capabilities ?? []).some((c) => unit.capabilities.includes(c)))
+    .map((i) => ({
+      incident: i,
+      km: unit.lat != null && unit.lng != null && i.lat != null && i.lng != null
+        ? haversineKm({ lat: unit.lat, lng: unit.lng }, { lat: i.lat, lng: i.lng })
+        : null,
+    }))
+    .sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9))
+    .slice(0, 5);
+
+  return (
+    <section aria-label="Open incidents you are eligible for" className="mt-3 panel">
+      <header className="panel-head"><span>Eligible nearby</span>
+        <span className="text-ink-faint font-normal normal-case tracking-normal">read-only</span>
+      </header>
+      {nearby.length === 0 ? (
+        <p className="p-3 text-[12px] text-ink-faint">
+          No open incidents match this unit&apos;s capabilities right now.
+        </p>
+      ) : (
+        <>
+          <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {nearby.map(({ incident: i, km }) => (
+              <li key={i.id} className="px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <PriorityBadge band={i.priority_band} score={i.priority_score} size="sm" />
+                    <span className="font-mono text-[12px] text-ink-secondary">{i.code}</span>
+                  </span>
+                  {km != null && (
+                    <span className="text-[11px] text-ink-faint tabular-nums shrink-0">
+                      {km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-[12px] text-ink-tertiary line-clamp-1">
+                  {i.address_text ?? i.short_summary ?? ""}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <p className="px-3 py-2 text-[10.5px] text-ink-faint border-t" style={{ borderColor: "var(--border)" }}>
+            Shown for awareness. Dispatch is assigned by a coordinator.
+          </p>
+        </>
+      )}
+    </section>
   );
 }
