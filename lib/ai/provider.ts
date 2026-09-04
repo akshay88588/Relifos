@@ -47,7 +47,7 @@ export class FeatherlessProvider implements AIProvider {
     this.client = new OpenAI({
       apiKey,
       baseURL: process.env.FEATHERLESS_BASE_URL || "https://api.featherless.ai/v1",
-      timeout: 20_000,
+      timeout: Number(process.env.FEATHERLESS_TIMEOUT_MS ?? 12_000),
       maxRetries: 0,
     });
     this.model = process.env.FEATHERLESS_MODEL || "Qwen/Qwen2.5-7B-Instruct";
@@ -97,12 +97,20 @@ export class FeatherlessProvider implements AIProvider {
         ],
       });
       const text = res.choices?.[0]?.message?.content ?? "";
+      const elapsed = Date.now() - started;
+      // Per-ATTEMPT latency, not just the total the caller records. When a call
+      // is slow this is what shows whether it was the first attempt, the
+      // json-mode retry, or the fallback model that cost the time.
+      console.info(
+        `[featherless] model=${model} jsonMode=${jsonMode} ${elapsed}ms ` +
+        `in=${res.usage?.prompt_tokens ?? "?"} out=${res.usage?.completion_tokens ?? "?"}`,
+      );
       if (!text.trim()) throw new AIProviderError("Empty completion from provider");
       return {
         text,
         model,
         provider: this.name,
-        latencyMs: Date.now() - started,
+        latencyMs: elapsed,
         promptTokens: res.usage?.prompt_tokens,
         completionTokens: res.usage?.completion_tokens,
       };

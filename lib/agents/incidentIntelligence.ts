@@ -81,7 +81,7 @@ export async function assessIncident(
     const completion = await provider.complete({
       system: INCIDENT_INTELLIGENCE_SYSTEM,
       user: incidentIntelligenceUser(report, locationHint),
-      maxTokens: 500,
+      maxTokens: 320,
       temperature: 0.1,
     });
     raw = completion.text;
@@ -105,7 +105,7 @@ VALIDATION ERRORS:
 ${outcome.issues.join("\n")}
 
 Return ONLY the corrected JSON object.`,
-        maxTokens: 500,
+        maxTokens: 320,
         temperature: 0,
       });
       raw = repair.text;

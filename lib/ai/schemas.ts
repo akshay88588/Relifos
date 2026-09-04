@@ -25,8 +25,15 @@ export const responsePlanSchema = z.object({
   recommended_responder_id: z.string().min(1),
   rationale_bullets: z.array(z.string().max(140)).min(1).max(3),
   risk_notes: z.array(z.string().max(140)).max(3).default([]),
-  requires_human_approval: z.boolean(),
 });
+
+/**
+ * What the planner stage actually returns: the model's choice plus the approval
+ * flag, which is decided by policy and never by the model.
+ */
+export type ResponsePlan = z.infer<typeof responsePlanSchema> & {
+  requires_human_approval: boolean;
+};
 
 export type ResponsePlanOut = z.infer<typeof responsePlanSchema>;
 

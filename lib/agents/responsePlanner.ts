@@ -1,6 +1,6 @@
 import { PROMPT_VERSION, RESPONSE_PLANNER_SYSTEM, responsePlannerUser } from "@/lib/ai/prompts";
 import { getProvider } from "@/lib/ai/provider";
-import { responsePlanSchema, type ResponsePlanOut } from "@/lib/ai/schemas";
+import { responsePlanSchema, type ResponsePlan } from "@/lib/ai/schemas";
 import { extractJson, validateWithSchema } from "@/lib/ai/validate";
 import type { ScoredCandidate } from "@/lib/domain/types";
 import type { AgentResult, AiDecisionRecord } from "./incidentIntelligence";
@@ -21,11 +21,11 @@ export async function planResponse(args: {
               priority_band: string; people_affected: number; vulnerability_flags: string[];
               required_capabilities: string[]; short_summary: string };
   candidates: ScoredCandidate[];
-}): Promise<AgentResult<ResponsePlanOut>> {
+}): Promise<AgentResult<ResponsePlan>> {
   const eligible = args.candidates.filter((c) => c.eligible).slice(0, 3);
   const deterministicTop = eligible[0];
 
-  const fallbackPlan: ResponsePlanOut = {
+  const fallbackPlan: ResponsePlan = {
     recommended_responder_id: deterministicTop?.responder_id ?? "",
     rationale_bullets: deterministicTop
       ? [
@@ -68,7 +68,7 @@ export async function planResponse(args: {
     const completion = await provider.complete({
       system: RESPONSE_PLANNER_SYSTEM,
       user: responsePlannerUser(payload),
-      maxTokens: 350,
+      maxTokens: 220,
       temperature: 0.2,
     });
 
@@ -95,12 +95,13 @@ export async function planResponse(args: {
       };
     }
 
-    // The model may never weaken the approval requirement.
-    const plan: ResponsePlanOut = {
+    // Approval is policy, not a model output. Deciding it here (rather than
+    // asking the model and overriding it) removes a required schema field the
+    // model intermittently omitted, which was rejecting otherwise-valid plans.
+    const plan: ResponsePlan = {
       ...outcome.data,
       risk_notes: outcome.data.risk_notes ?? [],
       requires_human_approval:
-        outcome.data.requires_human_approval ||
         args.incident.priority_band === "CRITICAL" ||
         args.incident.priority_band === "HIGH",
     };

@@ -39,7 +39,7 @@ Rules:
 - "recommended_responder_id" MUST be one of the supplied candidate ids. Never invent one.
 - "rationale_bullets": at most 3 short factual bullets referring only to the supplied data.
 - Do not mention that you are an AI model. Write like an operations officer.
-- "requires_human_approval" must be true for any critical or high priority incident.`;
+- Do NOT decide whether a human must approve: that is policy, decided outside the model.`;
 
 export function responsePlannerUser(payload: unknown) {
   return `${JSON.stringify(payload, null, 1)}
