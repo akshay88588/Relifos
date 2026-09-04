@@ -1,5 +1,9 @@
 # ReliefOS
 
+- **Live demo:** __DEPLOY_URL__
+- **Demo video:** __VIDEO_URL__
+- **Built with Featherless.ai** — two agents, `lib/agents/`
+
 **Real-time AI emergency coordination operating system.**
 *From scattered reports to coordinated action.*
 
