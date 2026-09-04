@@ -4,13 +4,13 @@ import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 const DEMO = [
-  { label: "Coordinator", email: "coordinator@reliefos.demo", to: "/command" },
-  { label: "Responder", email: "responder@reliefos.demo", to: "/responder" },
+  { label: "Coordinator", email: "coordinator@reliefos.com", to: "/command" },
+  { label: "Responder", email: "responder@reliefos.com", to: "/responder" },
 ];
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("coordinator@reliefos.demo");
+  const [email, setEmail] = useState("coordinator@reliefos.com");
   const [password, setPassword] = useState("reliefos-demo");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

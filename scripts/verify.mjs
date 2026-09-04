@@ -58,7 +58,7 @@ const run = async () => {
 
   step("1. Authentication and RBAC");
   const { data: auth, error: authErr } = await anon.auth.signInWithPassword({
-    email: "coordinator@reliefos.demo", password: "reliefos-demo",
+    email: "coordinator@reliefos.com", password: "reliefos-demo",
   });
   if (authErr) { bad("coordinator sign-in", authErr.message); process.exit(1); }
   const token = auth.session.access_token;
