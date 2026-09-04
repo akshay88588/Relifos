@@ -11,3 +11,4 @@ next-env.d.ts
 .vercel
 coverage/
 .git_broken/
+_to_delete/
