@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import type { Assignment, Incident, Responder } from "@/lib/clientTypes";
+import type { Assignment, ExclusionSummary, Incident, Responder } from "@/lib/clientTypes";
 import { OPEN_RECOMMENDATION, ACTIVE_ASSIGNMENT } from "@/lib/clientTypes";
 import { EmptyState, ListIcon, PriorityBadge, timeAgo } from "@/components/ui/bits";
 
@@ -21,8 +21,9 @@ const FILTERS: { id: Filter; label: string; hint: string }[] = [
  * filters and the search box operate on the real incident list already in
  * state; nothing here fetches, invents or caches a separate copy.
  */
-export function PriorityQueue({ incidents, assignments, responders, selectedId, onSelect }: {
+export function PriorityQueue({ incidents, assignments, responders, exclusions, selectedId, onSelect }: {
   incidents: Incident[]; assignments: Assignment[]; responders: Responder[];
+  exclusions?: Record<string, ExclusionSummary>;
   selectedId: string | null; onSelect: (id: string) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
@@ -182,7 +183,7 @@ export function PriorityQueue({ incidents, assignments, responders, selectedId, 
                       </span>
                     </div>
                   ) : (
-                    <div className="mt-1.5 text-[11px] text-ink-faint">no recommendation</div>
+                    <NoCandidate summary={exclusions?.[i.id]} />
                   )}
                 </button>
               </li>
@@ -190,6 +191,29 @@ export function PriorityQueue({ incidents, assignments, responders, selectedId, 
           })}
         </ul>
       </div>
+    </div>
+  );
+}
+
+/**
+ * "no recommendation" on a CRITICAL incident reads like the system gave up.
+ * The matching engine already recorded why every candidate was gated out, so
+ * show that instead: which reason dominated and how many units it excluded.
+ */
+function NoCandidate({ summary }: { summary?: ExclusionSummary }) {
+  if (!summary) {
+    return (
+      <div className="mt-1.5 text-[11px] text-ink-faint">
+        No candidate yet — matching has not run for this incident
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1.5 text-[11px]" style={{ color: "var(--p-high)" }}>
+      No candidate — {summary.reason.toLowerCase()}
+      <span className="text-ink-faint">
+        {" "}({summary.count} of {summary.total} units excluded)
+      </span>
     </div>
   );
 }

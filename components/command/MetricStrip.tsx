@@ -1,6 +1,6 @@
 "use client";
 import type { Assignment, Incident, Responder, Shelter } from "@/lib/clientTypes";
-import { OPEN_RECOMMENDATION } from "@/lib/clientTypes";
+import { OPEN_RECOMMENDATION, isResponderFree } from "@/lib/clientTypes";
 
 /**
  * The five numbers an operator must be able to read in one glance. Anything
@@ -16,7 +16,7 @@ export function MetricStrip({ incidents, responders, shelters, assignments }: {
   // is only awaiting a human if a recommendation is actually live for it.
   const awaiting = open.filter((i) =>
     assignments.some((a) => a.incident_id === i.id && OPEN_RECOMMENDATION.includes(a.status))).length;
-  const free = responders.filter((r) => r.status === "available" && r.current_load < r.max_concurrent).length;
+  const free = responders.filter(isResponderFree).length;
   const capTotal = shelters.reduce((s, x) => s + x.capacity_total, 0);
   const capUsed = shelters.reduce((s, x) => s + x.capacity_used, 0);
   const shelterPct = capTotal ? Math.round((capUsed / capTotal) * 100) : null;

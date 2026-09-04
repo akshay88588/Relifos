@@ -52,7 +52,25 @@ export const DEMO_INCIDENTS = [
 
 export async function seedWorld() {
   const existing = await R.listResponders();
-  if (existing.length > 0) return { responders: existing.length, seeded: false };
+  if (existing.length > 0) {
+    // The world is already seeded, but a Chaos run may have left units offline
+    // and carrying stale load. Re-seeding used to no-op, so the demo could only
+    // ever be restored with a full reset. Put every simulated unit back in
+    // service instead: the starting state must never be all-offline, or a
+    // CRITICAL incident has no candidate to match against.
+    const { error } = await admin()
+      .from("responders")
+      .update({ status: "available", current_load: 0 })
+      .eq("is_simulated", true);
+    if (error) console.error("[simulation] could not restore responders", error.message);
+
+    await publish({
+      type: "simulation.step_executed", entity_type: "system",
+      payload: { step: "restore_responders", restored: existing.length,
+                 note: "Simulated units returned to available" },
+    });
+    return { responders: existing.length, seeded: false, restored: true };
+  }
 
   await admin().from("responders").insert(
     DEMO_RESPONDERS.map((r) => ({

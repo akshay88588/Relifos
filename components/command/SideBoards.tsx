@@ -1,10 +1,10 @@
 "use client";
 import type { Assignment, Responder, Shelter } from "@/lib/clientTypes";
-import { ACTIVE_ASSIGNMENT } from "@/lib/clientTypes";
+import { ACTIVE_ASSIGNMENT, isResponderFree, byAvailabilityThenName } from "@/lib/clientTypes";
 import { Bar, EmptyState, StatusDot } from "@/components/ui/bits";
 
 export function ResponderBoard({ responders, assignments }: { responders: Responder[]; assignments: Assignment[] }) {
-  const free = responders.filter((r) => r.status === "available").length;
+  const free = responders.filter(isResponderFree).length;
   return (
     <div className="panel flex flex-col min-h-0">
       <div className="panel-head">
@@ -12,7 +12,7 @@ export function ResponderBoard({ responders, assignments }: { responders: Respon
         <span className="text-ink-faint font-normal normal-case tracking-normal tabular-nums">{free} free</span>
       </div>
       <div className="scroll-y max-h-[240px]">
-        {responders.map((r) => {
+        {[...responders].sort(byAvailabilityThenName).map((r) => {
           const active = assignments.find((a) => a.responder_id === r.id && ACTIVE_ASSIGNMENT.includes(a.status));
           return (
             <div key={r.id} className="px-3 py-1.5 border-b flex items-center justify-between gap-2"

@@ -4,6 +4,7 @@ import { listIncidents } from "@/lib/repositories/incidents";
 import { listResponders } from "@/lib/repositories/responders";
 import { listAssignments } from "@/lib/repositories/assignments";
 import { admin } from "@/lib/supabase/admin";
+import { exclusionSummaryFor } from "@/lib/repositories/matches";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +29,18 @@ export async function GET() {
       .eq("status", "running").maybeSingle(),
   ]);
 
+  // Incidents with nothing recommended: explain WHY, from the reasons the
+  // matching engine persisted, rather than showing a bare "no recommendation".
+  const liveAssignment = new Set(
+    assignments
+      .filter((a) => ["recommended", "awaiting_approval", "dispatched", "accepted", "en_route", "on_scene"].includes(a.status))
+      .map((a) => a.incident_id),
+  );
+  const unmatched = incidents.filter((i) => !liveAssignment.has(i.id)).map((i) => i.id);
+  const exclusions = await exclusionSummaryFor(unmatched);
+
   return ok({
-    incidents, responders, assignments,
+    incidents, responders, assignments, exclusions,
     shelters: shelters.data ?? [],
     events: (events.data ?? []).reverse(),
     notifications: notifications.data ?? [],

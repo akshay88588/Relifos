@@ -38,8 +38,12 @@ export interface Factor {
   label: string; detail: string | null; contribution: number; direction: string;
 }
 
+export interface ExclusionSummary { reason: string; count: number; total: number }
+
 export interface ReliefState {
   incidents: Incident[];
+  /** incident id -> why no responder could be recommended */
+  exclusions?: Record<string, ExclusionSummary>;
   responders: Responder[];
   assignments: Assignment[];
   shelters: Shelter[];
@@ -50,3 +54,20 @@ export interface ReliefState {
 
 export const ACTIVE_ASSIGNMENT = ["dispatched", "accepted", "en_route", "on_scene"];
 export const OPEN_RECOMMENDATION = ["recommended", "awaiting_approval"];
+
+/**
+ * THE definition of an available responder. The command-centre header and the
+ * responder panel each had their own version of this - the header also required
+ * spare capacity, the panel did not - so a unit at max load was counted "free"
+ * in one place and not the other. That is the 4/8-vs-4-free mismatch.
+ */
+export function isResponderFree(r: Pick<Responder, "status" | "current_load" | "max_concurrent">) {
+  return r.status === "available" && r.current_load < r.max_concurrent;
+}
+
+/** Available units first, then by name; offline sinks to the bottom. */
+export function byAvailabilityThenName(a: Responder, b: Responder) {
+  const rank = (r: Responder) =>
+    isResponderFree(r) ? 0 : r.status === "offline" ? 2 : 1;
+  return rank(a) - rank(b) || a.name.localeCompare(b.name);
+}

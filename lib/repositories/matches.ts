@@ -34,3 +34,51 @@ export async function listCandidates(incidentId: string) {
     .order("score", { ascending: false });
   return data ?? [];
 }
+
+export interface ExclusionSummary {
+  /** the most common reason a candidate was gated out */
+  reason: string;
+  /** how many responders were excluded for that reason */
+  count: number;
+  /** how many were excluded in total, for any reason */
+  total: number;
+}
+
+/**
+ * Why an incident has no recommendation.
+ *
+ * The matching engine already writes a reason against every candidate it gates
+ * out. A card saying only "no recommendation" throws that away and looks like a
+ * bug; the coordinator needs to know it was "all flood_rescue units offline"
+ * rather than "the system did not try".
+ */
+export async function exclusionSummaryFor(
+  incidentIds: string[],
+): Promise<Record<string, ExclusionSummary>> {
+  if (!incidentIds.length) return {};
+  const { data, error } = await admin()
+    .from("match_candidates")
+    .select("incident_id, exclusion_reason")
+    .in("incident_id", incidentIds)
+    .eq("eligible", false);
+  if (error) {
+    console.error("[matches] exclusionSummaryFor", error.message);
+    return {};
+  }
+
+  const byIncident: Record<string, Record<string, number>> = {};
+  for (const row of (data ?? []) as { incident_id: string; exclusion_reason: string | null }[]) {
+    const reason = row.exclusion_reason?.trim();
+    if (!reason) continue;
+    (byIncident[row.incident_id] ??= {});
+    byIncident[row.incident_id][reason] = (byIncident[row.incident_id][reason] ?? 0) + 1;
+  }
+
+  const out: Record<string, ExclusionSummary> = {};
+  for (const [incidentId, reasons] of Object.entries(byIncident)) {
+    const ranked = Object.entries(reasons).sort((a, b) => b[1] - a[1]);
+    const total = ranked.reduce((n, [, c]) => n + c, 0);
+    out[incidentId] = { reason: ranked[0][0], count: ranked[0][1], total };
+  }
+  return out;
+}
