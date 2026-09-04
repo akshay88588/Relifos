@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+
+html, body {
+  background: #09090b;
+  color: #e4e4e7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Operations console: dense, quiet, high contrast where it matters. */
+@layer components {
+  .panel { @apply bg-base-900 border border-white/[0.07] rounded-md; }
+  .panel-head { @apply px-3 py-2 border-b border-white/[0.07] text-[11px] uppercase tracking-[0.12em] text-zinc-500 flex items-center justify-between; }
+  .btn { @apply px-3 py-1.5 rounded text-[13px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed; }
+  .btn-primary { @apply btn bg-emerald-600 hover:bg-emerald-500 text-white; }
+  .btn-danger { @apply btn bg-red-600/90 hover:bg-red-500 text-white; }
+  .btn-ghost { @apply btn bg-white/5 hover:bg-white/10 text-zinc-300; }
+  .chip { @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold; }
+  .label { @apply text-[10px] uppercase tracking-[0.14em] text-zinc-500; }
+  .kv { @apply text-[13px] text-zinc-200; }
+}
+
+.band-CRITICAL { color: #ef4444; }
+.band-HIGH { color: #f97316; }
+.band-MEDIUM { color: #eab308; }
+.band-LOW { color: #22c55e; }
+.bg-band-CRITICAL { background-color: #ef4444; }
+.bg-band-HIGH { background-color: #f97316; }
+.bg-band-MEDIUM { background-color: #eab308; }
+.bg-band-LOW { background-color: #22c55e; }
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.pulse-ring { animation: pulse-ring 1.6s ease-out infinite; }
+
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.row-in { animation: row-in 260ms ease-out; }
+
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+.maplibregl-ctrl-attrib { font-size: 9px; }
