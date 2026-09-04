@@ -1,11 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // ESLint stays off during builds (style rules should not block a deploy),
-  // but type errors MUST fail the build - that is the check which catches real
-  // bugs, and a pre-demo commit is exactly when it matters most.
+  // Both gates are enforced at build time. `npm run lint` currently reports zero
+  // errors, so there is no reason to let a build through that lint would reject
+  // — and a pre-demo commit is exactly when that safety net matters most.
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
 };
 export default nextConfig;
