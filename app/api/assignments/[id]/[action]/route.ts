@@ -28,7 +28,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string; ac
   // Same rule as the status endpoint: a bound responder account may only act on
   // its own assignments. Without this, any responder could accept, decline or
   // complete another unit's dispatch by sending the request by hand.
-  if (user!.role === "responder" && user!.responder_id) {
+  if (user!.role === "responder") {
+    if (!user!.responder_id) {
+      return fail("forbidden", "This responder account is not linked to a unit yet", 403);
+    }
     const assignment = await getAssignment(id);
     if (!assignment) return fail("not_found", "Assignment not found", 404);
     if (assignment.responder_id !== user!.responder_id) {

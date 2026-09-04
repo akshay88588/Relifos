@@ -17,6 +17,8 @@ interface IntakeResult {
   recommendation?: unknown;
   reason?: string;
   degraded?: boolean;
+  /** Issued once at creation; proves ownership when adding detail later. */
+  reporter_token?: string | null;
 }
 
 /**
@@ -38,6 +40,7 @@ export default function ReportPage() {
   const [locSource, setLocSource] = useState<LocSource>("pending");
   const [addressHint, setAddressHint] = useState("");
   const [result, setResult] = useState<IntakeResult | null>(null);
+  const [reporterToken, setReporterToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [speechOk, setSpeechOk] = useState(false);
   const recRef = useRef<{ start: () => void; stop: () => void } | null>(null);
@@ -127,7 +130,11 @@ export default function ReportPage() {
         setStage("error");
         return;
       }
-      setResult(data); setStage("done");
+      setResult(data);
+      // Held in memory only, for the life of this page. It is the reporter's
+      // capability to amend their own report without signing in.
+      if (data?.reporter_token) setReporterToken(data.reporter_token);
+      setStage("done");
     } catch {
       setError("Network problem — your report was not sent. Check your connection and try again.");
       setStage("error");
@@ -276,7 +283,7 @@ export default function ReportPage() {
                     <li key={n} className="flex gap-1.5"><span aria-hidden="true" className="text-ink-faint">·</span>{m}</li>
                   ))}
                 </ul>
-                <AddDetail incidentId={inc.id} onDone={setResult} />
+                <AddDetail incidentId={inc.id} token={reporterToken} onDone={setResult} />
               </div>
             )}
           </div>
@@ -313,7 +320,10 @@ function Steps({ stage, result }: { stage: Stage; result: IntakeResult | null })
   );
 }
 
-function AddDetail({ incidentId, onDone }: { incidentId: string; onDone: (r: IntakeResult) => void }) {
+function AddDetail(
+  { incidentId, token, onDone }:
+  { incidentId: string; token: string | null; onDone: (r: IntakeResult) => void },
+) {
   const [v, setV] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -322,7 +332,11 @@ function AddDetail({ incidentId, onDone }: { incidentId: string; onDone: (r: Int
     setBusy(true); setErr(null);
     try {
       const res = await fetch(`/api/incidents/${incidentId}/updates`, {
-        method: "POST", headers: { "content-type": "application/json" },
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { "x-reporter-token": token } : {}),
+        },
         body: JSON.stringify({ description: v.trim() }),
       });
       const data = await res.json();

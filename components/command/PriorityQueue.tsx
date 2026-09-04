@@ -154,7 +154,9 @@ export function PriorityQueue({ incidents, assignments, responders, selectedId, 
                   </p>
 
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-ink-tertiary">
-                    <span>{i.people_affected} {i.people_affected === 1 ? "person" : "people"}</span>
+                    <span>{i.people_affected === 0
+                      ? "no casualties reported"
+                      : `${i.people_affected} ${i.people_affected === 1 ? "person" : "people"}`}</span>
                     {i.vulnerability_flags?.slice(0, 2).map((f) => (
                       <span key={f} style={{ color: "var(--p-high)" }}>{f.replace(/_/g, " ")}</span>
                     ))}

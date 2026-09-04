@@ -37,9 +37,20 @@ export async function setResponderLocation(id: string, lat: number, lng: number)
   });
 }
 
+/**
+ * Atomic load adjustment.
+ *
+ * This used to read the row, add the delta in JavaScript and write it back,
+ * which loses an update when two dispatches commit at the same time. Because
+ * current_load gates candidate eligibility in the matching engine, drift here
+ * silently changes who gets dispatched. The arithmetic now happens inside
+ * Postgres in a single statement.
+ */
 export async function adjustLoad(id: string, delta: number) {
-  const r = await getResponder(id);
-  if (!r) return null;
-  const next = Math.max(0, r.current_load + delta);
-  return updateResponder(id, { current_load: next });
+  const { data, error } = await admin().rpc("adjust_responder_load", { p_id: id, p_delta: delta });
+  if (error) {
+    console.error("[responders] adjustLoad failed", error.message);
+    return null;
+  }
+  return { id, current_load: data as number };
 }

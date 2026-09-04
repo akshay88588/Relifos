@@ -107,6 +107,8 @@ export async function intakeIncident(args: {
   const final = (await I.getIncident(created.id))!;
   return {
     incident: final,
+    // Returned to the reporter once, at creation. Required to add detail later.
+    reporter_token: (created as { reporter_token?: string }).reporter_token ?? null,
     assessment: d,
     degraded: assessment.degraded,
     candidates: match.candidates,

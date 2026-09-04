@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { admin } from "@/lib/supabase/admin";
 import type { CandidateResponder } from "@/lib/domain/types";
 
@@ -40,11 +41,15 @@ export async function createIncident(args: {
       reported_by: args.reported_by ?? null,
       is_simulated: args.is_simulated ?? false,
       status: "new",
+      // Capability token handed back to the reporter exactly once, so they can
+      // add detail to their OWN report later without being signed in. It is
+      // never included in any list or detail read (see INCIDENT_COLUMNS).
+      reporter_token: randomUUID(),
     })
-    .select(INCIDENT_COLUMNS)
+    .select(`${INCIDENT_COLUMNS}, reporter_token`)
     .single();
   if (error) throw new Error(`createIncident: ${error.message}`);
-  return data as unknown as IncidentRow;
+  return data as unknown as IncidentRow & { reporter_token: string };
 }
 
 export async function getIncident(id: string) {
@@ -113,4 +118,29 @@ export async function recordAssessment(args: {
     ai_decision_id: args.ai_decision_id, structured: args.structured as any, trigger: args.trigger,
   });
   if (error) throw new Error(`recordAssessment: ${error.message}`);
+}
+
+/**
+ * Ownership check for the public "add detail" endpoint.
+ *
+ * Both the token and the reporter id live outside INCIDENT_COLUMNS, so they are
+ * never returned by any read path; they are only ever compared here, on the
+ * server. Returns true when the caller either presents the token issued at
+ * creation or is the signed-in user who filed the report.
+ */
+export async function canAmendIncident(
+  incidentId: string,
+  token: string | null,
+  userId: string | null,
+) {
+  const { data } = await admin()
+    .from("incidents")
+    .select("reporter_token, reported_by")
+    .eq("id", incidentId)
+    .maybeSingle();
+  if (!data) return false;
+  const row = data as { reporter_token: string | null; reported_by: string | null };
+  if (token && row.reporter_token && row.reporter_token === token) return true;
+  if (userId && row.reported_by && row.reported_by === userId) return true;
+  return false;
 }

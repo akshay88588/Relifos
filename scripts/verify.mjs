@@ -188,6 +188,112 @@ const run = async () => {
     await api(`/api/responders/${units[0].id}/status`, { method: "PATCH", body: JSON.stringify({ status: "available" }) }, token);
   }
 
+  step("7b. Security regressions (audit fixes)");
+
+  // P0-1: the SECURITY DEFINER RPCs must no longer be callable with the public
+  // anon key. Before the fix these leaked every responder's live coordinates.
+  {
+    const rpc = async (fn, body) => {
+      const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, {
+        method: "POST",
+        headers: { apikey: ANON, authorization: `Bearer ${ANON}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return r.status;
+    };
+    const s1 = await rpc("nearby_capable_responders", { p_lng: 78.666, p_lat: 17.4718, p_caps: [], p_radius_m: 50000 });
+    s1 >= 400
+      ? ok("anon cannot call nearby_capable_responders", `HTTP ${s1}`)
+      : bad("anon can still read responder locations via RPC", `HTTP ${s1}`);
+    const s2 = await rpc("consume_rate_limit", { p_key: "probe", p_limit: 1, p_window_seconds: 60 });
+    s2 >= 400
+      ? ok("anon cannot poison rate-limit buckets", `HTTP ${s2}`)
+      : bad("anon can still call consume_rate_limit", `HTTP ${s2}`);
+    const s3 = await fetch(`${URL_}/rest/v1/responders?select=id,lat,lng`, {
+      headers: { apikey: ANON, authorization: `Bearer ${ANON}` },
+    });
+    const rows = await s3.json().catch(() => []);
+    (Array.isArray(rows) ? rows.length : 0) === 0
+      ? ok("anon direct table read returns nothing (RLS holds)")
+      : bad("anon can read the responders table directly", `${rows.length} rows`);
+  }
+
+  // P0-2: adding detail to someone else's report must be refused.
+  {
+    const probe = await api("/api/incidents", {
+      method: "POST",
+      body: JSON.stringify({
+        description: "Verification probe: minor water logging on the lane, nobody is hurt at all.",
+        lat: 17.4700, lng: 78.6600, source: "text",
+      }),
+    });
+    const pid = probe.body?.incident?.id;
+    const token = probe.body?.reporter_token;
+    token ? ok("reporter token issued at creation") : bad("no reporter token returned");
+
+    if (pid) {
+      const noToken = await fetch(`${BASE}/api/incidents/${pid}/updates`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ description: "Ten more people are trapped and unconscious." }),
+      });
+      noToken.status === 403
+        ? ok("stranger cannot amend a report they do not own", "HTTP 403")
+        : bad("unauthenticated update accepted", `HTTP ${noToken.status}`);
+
+      const wrongToken = await fetch(`${BASE}/api/incidents/${pid}/updates`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-reporter-token": "00000000-0000-0000-0000-000000000000" },
+        body: JSON.stringify({ description: "Ten more people are trapped." }),
+      });
+      wrongToken.status === 403
+        ? ok("a forged reporter token is rejected", "HTTP 403")
+        : bad("forged token accepted", `HTTP ${wrongToken.status}`);
+
+      if (token) {
+        const good = await fetch(`${BASE}/api/incidents/${pid}/updates`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-reporter-token": token },
+          body: JSON.stringify({ description: "The water has now reached the doorway." }),
+        });
+        good.status === 200
+          ? ok("the real reporter can still add detail", "HTTP 200")
+          : bad("valid reporter token was refused", `HTTP ${good.status}`);
+      }
+    }
+  }
+
+  // P1-4: a responder account bound to one unit must not move another unit.
+  {
+    const { data: rAuth } = await anon.auth.signInWithPassword({
+      email: "responder@reliefos.com", password: "reliefos-demo",
+    });
+    if (rAuth?.session) {
+      const rTok = rAuth.session.access_token;
+      const { data: prof } = await db.from("profiles").select("responder_id")
+        .eq("id", rAuth.user.id).maybeSingle();
+      prof?.responder_id
+        ? ok("responder account is bound to a unit")
+        : bad("responder account has no unit binding - guards cannot fire");
+
+      const { data: other } = await db.from("responders").select("id, name")
+        .neq("id", prof?.responder_id ?? "00000000-0000-0000-0000-000000000000").limit(1);
+      if (other?.[0]) {
+        const r = await api(`/api/responders/${other[0].id}/status`, {
+          method: "PATCH", body: JSON.stringify({ status: "offline" }),
+        }, rTok);
+        r.status === 403
+          ? ok("responder cannot take another unit offline", `HTTP 403 (${other[0].name})`)
+          : bad("responder moved another unit", `HTTP ${r.status}`);
+      }
+      const ownOk = await api(`/api/responders/${prof?.responder_id}/status`, {
+        method: "PATCH", body: JSON.stringify({ status: "available" }),
+      }, rTok);
+      ownOk.status === 200
+        ? ok("responder can still operate its own unit")
+        : bad("responder blocked from its own unit", `HTTP ${ownOk.status}`);
+    }
+  }
+
   step("8. Event log integrity");
   const { data: evts } = await db.from("system_events").select("seq, type").order("seq", { ascending: true });
   evts?.length ? ok("events persisted", `${evts.length} rows`) : bad("events persisted");

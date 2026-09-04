@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useReliefStream } from "@/lib/realtime/useReliefStream";
 import { ConnectionPill } from "@/components/command/StatusBar";
 import { UserChip } from "@/components/command/UserChip";
@@ -25,8 +25,29 @@ const STATUSES = ["available", "busy", "offline"] as const;
 export default function ResponderConsole() {
   const { state, connection, error, refetch } = useReliefStream();
   const [me, setMe] = useState<string | null>(null);
+  /** The unit this signed-in account is provisioned to operate, if any. */
+  const [boundUnit, setBoundUnit] = useState<string | null>(null);
+  const [boundLoaded, setBoundLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<{ text: string; ok: boolean } | null>(null);
+
+  // A provisioned responder account may only operate its own unit - the server
+  // enforces this, so the picker must not offer choices that will be refused.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/me", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        if (d?.user?.role === "responder" && d.user.responder_id) {
+          setBoundUnit(d.user.responder_id);
+          setMe(d.user.responder_id);
+        }
+        setBoundLoaded(true);
+      })
+      .catch(() => { if (alive) setBoundLoaded(true); });
+    return () => { alive = false; };
+  }, []);
 
   const responders = state?.responders ?? [];
   const unit = responders.find((r) => r.id === me) ?? null;
@@ -91,12 +112,18 @@ export default function ResponderConsole() {
               value={me ?? ""}
               onChange={(e) => setMe(e.target.value || null)}
               className="field"
+              disabled={Boolean(boundUnit)}
             >
               <option value="">Select your unit…</option>
-              {responders.map((r) => (
+              {(boundUnit ? responders.filter((r) => r.id === boundUnit) : responders).map((r) => (
                 <option key={r.id} value={r.id}>{r.name} — {r.type}</option>
               ))}
             </select>
+          )}
+          {boundLoaded && boundUnit && (
+            <p className="mt-2 text-[11px] text-ink-faint">
+              This account is linked to a single unit. Coordinators can operate any unit.
+            </p>
           )}
         </div>
 
