@@ -55,17 +55,19 @@ export default function ReportPage() {
 
   function locate() {
     if (!navigator.geolocation) {
+      // Centre the picker on the operating area but leave `coords` null: a
+      // report must carry a location the reporter actually chose, never a
+      // default that happens to be submittable.
       setLocSource("unavailable");
-      setCoords((c) => c ?? { lat: 17.4718, lng: 78.666 });
       return;
     }
     setLocSource("pending");
     navigator.geolocation.getCurrentPosition(
       (p) => { setCoords({ lat: p.coords.latitude, lng: p.coords.longitude }); setLocSource("gps"); },
       () => {
-        // Refused or timed out. Do NOT silently pretend we know where they are —
-        // seed the map at the operating area and ask them to place the pin.
-        setCoords((c) => c ?? { lat: 17.4718, lng: 78.666 });
+        // Refused or timed out. Do NOT silently pretend we know where they are,
+        // and do NOT leave a default coordinate sitting in the form ready to be
+        // submitted — the reporter must place the pin themselves.
         setLocSource("unavailable");
       },
       { timeout: 8000, enableHighAccuracy: true },
@@ -214,7 +216,9 @@ export default function ReportPage() {
               {locSource === "pending" && "Finding your location…"}
               {locSource === "gps" && "Located from your device. Move the pin if it is not exact."}
               {locSource === "manual" && "Pin placed by you."}
-              {locSource === "unavailable" && "We could not get your location — tap the map to place the pin."}
+              {locSource === "unavailable" && !coords &&
+                "We could not get your location — tap the map to place the pin before sending."}
+              {locSource === "unavailable" && coords && "Pin placed by you."}
               {coords && (
                 <span className="mono text-ink-faint"> {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</span>
               )}
@@ -231,7 +235,8 @@ export default function ReportPage() {
           </div>
 
           <div className="mt-4 flex justify-end">
-            <button className="btn-primary w-full sm:w-auto" disabled={stage === "sending"} onClick={submit}>
+            <button className="btn-primary w-full sm:w-auto"
+              disabled={stage === "sending" || !coords} onClick={submit}>
               {stage === "sending" ? <><Spinner /> Sending…</> : "Send report"}
             </button>
           </div>

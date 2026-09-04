@@ -7,6 +7,7 @@ import { setResponderStatus } from "./responderService";
 import { adjustShelterCapacity } from "./resourceService";
 import { ageOpenIncidents } from "./reconciler";
 import { setConfig } from "./config";
+import { assertWithinOperatingArea, jitterAround, placeByName } from "@/lib/places";
 
 /**
  * SIMULATION AND CHAOS MODE.
@@ -20,35 +21,53 @@ import { setConfig } from "./config";
 const CENTRE = { lat: 17.4718, lng: 78.6660 }; // Ghatkesar / SNIST area, Hyderabad
 
 export const DEMO_RESPONDERS = [
-  { name: "Alpha Rescue", type: "rescue", caps: ["flood_rescue", "boat", "swift_water", "structural_rescue"], lat: 17.4780, lng: 78.6520, speed: 30, max: 1 },
-  { name: "Bravo Rescue", type: "rescue", caps: ["flood_rescue", "boat", "evacuation"], lat: 17.4550, lng: 78.6900, speed: 28, max: 1 },
-  { name: "Medic One", type: "medical", caps: ["medical_first_aid", "advanced_medical", "transport"], lat: 17.4700, lng: 78.6710, speed: 35, max: 1 },
-  { name: "Medic Two", type: "medical", caps: ["medical_first_aid", "transport"], lat: 17.4920, lng: 78.6400, speed: 35, max: 1 },
-  { name: "Fire Unit 7", type: "fire", caps: ["fire_suppression", "gas_safety", "evacuation", "structural_rescue"], lat: 17.4620, lng: 78.6450, speed: 30, max: 1 },
-  { name: "Volunteer Team Sindhu", type: "volunteer", caps: ["evacuation", "supplies", "shelter_support"], lat: 17.4740, lng: 78.6630, speed: 20, max: 2 },
-  { name: "Volunteer Team Kranti", type: "volunteer", caps: ["evacuation", "supplies", "debris_clearance"], lat: 17.4490, lng: 78.6580, speed: 20, max: 2 },
-  { name: "Logistics Unit 3", type: "logistics", caps: ["transport", "supplies", "debris_clearance"], lat: 17.4850, lng: 78.6800, speed: 25, max: 2 },
+  { name: "Alpha Rescue",          place: "Ghatkesar Bus Depot",                        type: "rescue",    caps: ["flood_rescue", "boat", "swift_water", "structural_rescue"], speed: 30, max: 1 },
+  { name: "Bravo Rescue",          place: "ORR Ghatkesar Exit 9",                       type: "rescue",    caps: ["flood_rescue", "boat", "evacuation"],                        speed: 28, max: 1 },
+  { name: "Medic One",             place: "Primary Health Centre, Ghatkesar",           type: "medical",   caps: ["medical_first_aid", "advanced_medical", "transport"],        speed: 35, max: 1 },
+  { name: "Medic Two",             place: "KIMS Clinic, Ghatkesar Road",                type: "medical",   caps: ["medical_first_aid", "transport"],                            speed: 35, max: 1 },
+  { name: "Fire Unit 7",           place: "Ghatkesar Police Station",                   type: "fire",      caps: ["fire_suppression", "gas_safety", "evacuation", "structural_rescue"], speed: 30, max: 1 },
+  { name: "Volunteer Team Sindhu", place: "ZP High School, Ghatkesar",                  type: "volunteer", caps: ["evacuation", "supplies", "shelter_support"],                 speed: 20, max: 2 },
+  { name: "Volunteer Team Kranti", place: "Anurag University, Venkatapur",              type: "volunteer", caps: ["evacuation", "supplies", "debris_clearance"],                speed: 20, max: 2 },
+  { name: "Logistics Unit 3",      place: "Samskruti College of Engineering, Kondapur", type: "logistics", caps: ["transport", "supplies", "debris_clearance"],                 speed: 25, max: 2 },
 ];
 
 const DEMO_SHELTERS = [
-  { name: "Sunrise Community Hall", lat: 17.4695, lng: 78.6640, total: 200, used: 60 },
-  { name: "Ghatkesar Government School", lat: 17.4560, lng: 78.6820, total: 150, used: 40 },
-  { name: "Yamnampet Sports Complex", lat: 17.4830, lng: 78.6710, total: 300, used: 120 },
+  { name: "Government Junior College, Ghatkesar",        place: "Government Junior College, Ghatkesar",        total: 200, used: 60 },
+  { name: "Government Primary School, Aushapur",         place: "Government Primary School, Aushapur",         total: 150, used: 40 },
+  { name: "Sreenidhi Institute of Science & Technology", place: "Sreenidhi Institute of Science & Technology", total: 300, used: 120 },
 ];
 
 const DEMO_RESOURCES = [
-  { kind: "boat", label: "Inflatable rescue boats", total: 4, available: 4, lat: 17.4780, lng: 78.6520 },
-  { kind: "ambulance", label: "Ambulances", total: 3, available: 3, lat: 17.4700, lng: 78.6710 },
-  { kind: "supplies", label: "Water and ration packs", total: 500, available: 500, lat: 17.4850, lng: 78.6800 },
+  { kind: "boat",      label: "Inflatable rescue boats",   place: "Ghatkesar Bus Depot",                        total: 4,   available: 4 },
+  { kind: "ambulance", label: "Ambulances",                place: "Primary Health Centre, Ghatkesar",           total: 3,   available: 3 },
+  { kind: "supplies",  label: "Water and ration packs",    place: "Samskruti College of Engineering, Kondapur", total: 500, available: 500 },
 ];
 
 /** Background incidents, written as a citizen would actually phrase them. */
 export const DEMO_INCIDENTS = [
-  { text: "Water has come into the lane near our shop and two shops are flooded. No one is hurt but we cannot move our things out.", lat: 17.4665, lng: 78.6590 },
-  { text: "A tree has fallen across the road near the bus stop and vehicles cannot pass. Nobody is injured.", lat: 17.4805, lng: 78.6745 },
-  { text: "My neighbour is an old man living alone and the water is rising in his street. He cannot walk properly and needs help getting out.", lat: 17.4600, lng: 78.6680 },
-  { text: "There is a smell of gas near the apartment kitchen block and people are worried. Around fifteen families live here.", lat: 17.4750, lng: 78.6555 },
+  { place: "NTR Colony, Ghatkesar",
+    text: "Water has come into the lane near our shop and two shops are flooded. No one is hurt but we cannot move our things out." },
+  { place: "Ghatkesar Bypass Junction, NH-163",
+    text: "A tree has fallen across the road near the bus stop and vehicles cannot pass. Nobody is injured." },
+  { place: "Government Primary School, Aushapur",
+    text: "My neighbour is an old man living alone and the water is rising in his street. He cannot walk properly and needs help getting out." },
+  { place: "Shiva Temple, Yamnampet",
+    text: "There is a smell of gas near the apartment kitchen block and people are worried. Around fifteen families live here." },
 ];
+
+
+/**
+ * Resolve a named real place to a coordinate, validate it is inside the
+ * operating area, and offset it slightly and deterministically so that several
+ * things at the same address do not stack into one unreadable pin. The offset
+ * is under 120 m and derived from the seed, so there is no lattice and no
+ * run-to-run drift.
+ */
+function anchorOf(placeName: string, seed: number) {
+  const place = placeByName(placeName);
+  assertWithinOperatingArea(place.name, place.lat, place.lng);
+  return jitterAround(place, seed);
+}
 
 export async function seedWorld() {
   const existing = await R.listResponders();
@@ -73,24 +92,24 @@ export async function seedWorld() {
   }
 
   await admin().from("responders").insert(
-    DEMO_RESPONDERS.map((r) => ({
+    DEMO_RESPONDERS.map((r, i) => ({
       name: r.name, org: "ReliefOS Demo Agency", type: r.type, status: "available",
       capabilities: r.caps, current_load: 0, max_concurrent: r.max, speed_kmh: r.speed,
-      base_location: `SRID=4326;POINT(${r.lng} ${r.lat})`,
-      current_location: `SRID=4326;POINT(${r.lng} ${r.lat})`,
+      base_location: `SRID=4326;POINT(${anchorOf(r.place, i).lng} ${anchorOf(r.place, i).lat})`,
+      current_location: `SRID=4326;POINT(${anchorOf(r.place, i).lng} ${anchorOf(r.place, i).lat})`,
       is_simulated: true,
     })),
   );
   await admin().from("shelters").insert(
-    DEMO_SHELTERS.map((s) => ({
-      name: s.name, location: `SRID=4326;POINT(${s.lng} ${s.lat})`,
+    DEMO_SHELTERS.map((s, i) => ({
+      name: s.name, location: `SRID=4326;POINT(${anchorOf(s.place, 100 + i).lng} ${anchorOf(s.place, 100 + i).lat})`,
       capacity_total: s.total, capacity_used: s.used, status: "open", is_simulated: true,
     })),
   );
   await admin().from("resources").insert(
-    DEMO_RESOURCES.map((r) => ({
+    DEMO_RESOURCES.map((r, i) => ({
       kind: r.kind, label: r.label, quantity_total: r.total, quantity_available: r.available,
-      location: `SRID=4326;POINT(${r.lng} ${r.lat})`, is_simulated: true,
+      location: `SRID=4326;POINT(${anchorOf(r.place, 200 + i).lng} ${anchorOf(r.place, 200 + i).lat})`, is_simulated: true,
     })),
   );
 
@@ -107,8 +126,8 @@ export async function seedIncident(index: number) {
   const spec = DEMO_INCIDENTS[index];
   if (!spec) return null;
   return intakeIncident({
-    description: spec.text, lat: spec.lat, lng: spec.lng,
-    source: "simulation", address_text: "Ghatkesar area (demo)", is_simulated: true,
+    description: spec.text, ...anchorOf(spec.place, 300 + index),
+    source: "simulation", address_text: spec.place, is_simulated: true,
   });
 }
 
@@ -123,13 +142,13 @@ export interface ChaosStep {
 
 export const CHAOS_SCRIPT: ChaosStep[] = [
   { offset_s: 0, kind: "incident", label: "Flood report: family trapped on ground floor",
-    params: { text: "Water has entered our house and my parents are on the ground floor. My father cannot walk and we cannot get them out. Please send help fast.", lat: 17.4735, lng: 78.6605 } },
+    params: { text: "Water has entered our house and my parents are on the ground floor. My father cannot walk and we cannot get them out. Please send help fast.", place: "Sri Hanuman Temple, Ghatkesar Main Road" } },
   { offset_s: 8, kind: "incident", label: "Second report: stranded on a rooftop",
-    params: { text: "Four of us are stuck on the terrace, the water below is rising and the stairs are flooded. One person is a small child.", lat: 17.4665, lng: 78.6720 } },
+    params: { text: "Four of us are stuck on the terrace, the water below is rising and the stairs are flooded. One person is a small child.", place: "NTR Colony, Ghatkesar" } },
   { offset_s: 18, kind: "responder_offline", label: "Alpha Rescue goes offline (vehicle stuck)",
     params: { name: "Alpha Rescue" } },
   { offset_s: 28, kind: "incident", label: "Critical report: unconscious person",
-    params: { text: "An elderly woman has collapsed and is not responding. Water is inside the house and we cannot carry her out alone. Urgent.", lat: 17.4790, lng: 78.6690 } },
+    params: { text: "An elderly woman has collapsed and is not responding. Water is inside the house and we cannot carry her out alone. Urgent.", place: "Ghatkesar Railway Station" } },
   { offset_s: 38, kind: "shelter", label: "Sunrise Community Hall capacity drops",
     params: { name: "Sunrise Community Hall", delta: 130, reason: "Sudden intake of evacuated families" } },
   { offset_s: 48, kind: "reporter_update", label: "Reporter adds detail to an open incident",
@@ -240,8 +259,8 @@ async function executeStep(step: ChaosStep, runId: string) {
   switch (step.kind) {
     case "incident": {
       await intakeIncident({
-        description: step.params.text, lat: step.params.lat, lng: step.params.lng,
-        source: "simulation", address_text: "Ghatkesar area (demo)", is_simulated: true,
+        description: step.params.text, ...anchorOf(step.params.place, 400 + Number(step.offset_s)),
+        source: "simulation", address_text: step.params.place, is_simulated: true,
       });
       break;
     }

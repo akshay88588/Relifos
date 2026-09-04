@@ -40,6 +40,8 @@ export function LiveMap({
   onSelect: (id: string) => void; selectedId: string | null;
   isExpanded?: boolean; onToggleExpand?: () => void;
 }) {
+  /** Which overlapping group is currently fanned out, if any. */
+  const [openCluster, setOpenCluster] = useState<string | null>(null);
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   /** key -> marker + the element it owns. The element is mutated in place and
@@ -185,35 +187,96 @@ export function LiveMap({
     };
 
     if (layers.incidents) {
+      // OVERLAP HANDLING.
+      //
+      // Several incidents can legitimately share one address, and at city zoom
+      // they merged into an unreadable blob. Group anything within roughly 150 m
+      // into a cluster: collapsed it renders one pin carrying the group's worst
+      // priority and a count badge; clicking fans the members out on a small
+      // circle so each can be picked individually. Clicking it again collapses.
+      const PRECISION = 1_000; // ~110 m of latitude per unit at this scale
+      const groups = new Map<string, typeof plottable.incidents>();
       for (const i of plottable.incidents) {
-        const color = BAND_COLOR[i.priority_band] ?? "#71717a";
-        const selected = selectedId === i.id;
-        const pulsing = i.priority_band === "CRITICAL" && !i.resolved_at;
-        put(`i:${i.id}`, i.lat as number, i.lng as number, (el) => {
-          const size = selected ? 20 : i.priority_band === "CRITICAL" ? 16 : 13;
-          el.style.cssText =
-            `width:${size}px;height:${size}px;border-radius:50%;background:${color};` +
-            `box-shadow:0 0 0 ${selected ? 3 : 2}px rgba(255,255,255,${selected ? 0.6 : 0.2});` +
-            `cursor:pointer;position:relative;padding:0;border:none;` +
-            `transition:width 160ms,height 160ms,box-shadow 160ms`;
-          el.setAttribute("aria-label",
-            `${i.code}, ${i.priority_band} priority, score ${Math.round(i.priority_score)}. ${i.short_summary ?? ""}`);
-          el.setAttribute("aria-pressed", String(selected));
-          el.title = `${i.code} — ${i.priority_band} ${Math.round(i.priority_score)}`;
-          el.onclick = () => onSelect(i.id);
+        const key = `${Math.round((i.lat as number) * PRECISION)}:${Math.round((i.lng as number) * PRECISION)}`;
+        const bucket = groups.get(key);
+        if (bucket) bucket.push(i); else groups.set(key, [i]);
+      }
 
-          const ring = el.querySelector(".pulse-ring") as HTMLElement | null;
-          if (pulsing && !ring) {
-            const r = document.createElement("span");
-            r.className = "pulse-ring";
-            r.setAttribute("aria-hidden", "true");
-            r.style.cssText = `position:absolute;inset:0;border-radius:50%;background:${color};opacity:.5;pointer-events:none`;
-            el.appendChild(r);
-          } else if (pulsing && ring) {
-            ring.style.background = color;
-          } else if (!pulsing && ring) {
-            ring.remove();
+      const bandRank = (b: string) =>
+        b === "CRITICAL" ? 4 : b === "HIGH" ? 3 : b === "MEDIUM" ? 2 : 1;
+      // Higher priority paints above lower, and the selected pin above everything,
+      // so a CRITICAL incident is never hidden underneath a resolved one.
+      const zFor = (band: string, selected: boolean) =>
+        selected ? 60 : 10 * bandRank(band);
+
+      for (const [key, members] of groups) {
+        const worst = [...members].sort(
+          (a, b) => bandRank(b.priority_band) - bandRank(a.priority_band)
+            || b.priority_score - a.priority_score,
+        )[0];
+
+        const collapsed = members.length > 1 && openCluster !== key;
+
+        if (collapsed) {
+          const color = BAND_COLOR[worst.priority_band] ?? "#71717a";
+          put(`c:${key}`, worst.lat as number, worst.lng as number, (el) => {
+            el.style.cssText =
+              `min-width:22px;height:22px;padding:0 5px;border-radius:11px;background:${color};` +
+              `color:#0b0b0d;font:600 11px/22px ui-sans-serif,system-ui;text-align:center;` +
+              `box-shadow:0 0 0 2px rgba(255,255,255,.35);cursor:pointer;border:none;` +
+              `z-index:${zFor(worst.priority_band, false)}`;
+            el.textContent = String(members.length);
+            el.title = `${members.length} incidents here — click to expand`;
+            el.setAttribute("aria-label", `${members.length} incidents at this location. Activate to expand.`);
+            el.onclick = () => setOpenCluster(key);
+          });
+          continue;
+        }
+
+        const fanned = members.length > 1;
+        members.forEach((i, idx) => {
+          const color = BAND_COLOR[i.priority_band] ?? "#71717a";
+          const selected = selectedId === i.id;
+          const pulsing = i.priority_band === "CRITICAL" && !i.resolved_at;
+
+          // Fan members of an expanded cluster onto a small circle (~70 m) so
+          // each is individually clickable. A single incident is never moved.
+          let lat = i.lat as number;
+          let lng = i.lng as number;
+          if (fanned) {
+            const angle = (2 * Math.PI * idx) / members.length;
+            const metres = 70;
+            lat += (metres * Math.cos(angle)) / 111_320;
+            lng += (metres * Math.sin(angle)) / (111_320 * Math.cos((lat * Math.PI) / 180));
           }
+
+          put(`i:${i.id}`, lat, lng, (el) => {
+            const size = selected ? 20 : i.priority_band === "CRITICAL" ? 16 : 13;
+            el.style.cssText =
+              `width:${size}px;height:${size}px;border-radius:50%;background:${color};` +
+              `box-shadow:0 0 0 ${selected ? 3 : 2}px rgba(255,255,255,${selected ? 0.6 : 0.2});` +
+              `cursor:pointer;position:relative;padding:0;border:none;` +
+              `z-index:${zFor(i.priority_band, selected)};` +
+              `transition:width 160ms,height 160ms,box-shadow 160ms`;
+            el.setAttribute("aria-label",
+              `${i.code}, ${i.priority_band} priority, score ${Math.round(i.priority_score)}. ${i.short_summary ?? ""}`);
+            el.setAttribute("aria-pressed", String(selected));
+            el.title = `${i.code} — ${i.priority_band} ${Math.round(i.priority_score)}`;
+            el.onclick = () => onSelect(i.id);
+
+            const ring = el.querySelector(".pulse-ring") as HTMLElement | null;
+            if (pulsing && !ring) {
+              const r = document.createElement("span");
+              r.className = "pulse-ring";
+              r.setAttribute("aria-hidden", "true");
+              r.style.cssText = `position:absolute;inset:0;border-radius:50%;background:${color};opacity:.5;pointer-events:none`;
+              el.appendChild(r);
+            } else if (pulsing && ring) {
+              ring.style.background = color;
+            } else if (!pulsing && ring) {
+              ring.remove();
+            }
+          });
         });
       }
     }
@@ -273,7 +336,7 @@ export function LiveMap({
       const src = m.getSource("links") as maplibregl.GeoJSONSource | undefined;
       src?.setData({ type: "FeatureCollection", features });
     }
-  }, [plottable, assignments, selectedId, onSelect, layers]);
+  }, [plottable, assignments, selectedId, onSelect, layers, openCluster]);
 
   // ------------------------------------------------- camera reacts to events
   useEffect(() => {
