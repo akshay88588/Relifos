@@ -1,27 +1,36 @@
 import type { StyleSpecification } from "maplibre-gl";
 
 /**
- * BASEMAP CONFIGURATION - and the fix for the "zoom in, map breaks" bug.
+ * BASEMAP CONFIGURATION
  *
- * ROOT CAUSE of the original defect: the raster sources declared no `maxzoom`.
- * MapLibre's raster source defaults `maxzoom` to 22 (confirmed in the installed
- * bundle: `this.type="raster",this.minzoom=0,this.maxzoom=22`, and the
- * style-spec default for `source_raster.maxzoom` is 22). So as soon as the user
- * zoomed past a provider's deepest cached level, the map requested tiles that do
- * not exist. Esri's World_Dark_Gray_Base is cached to z16; every request at
- * z17+ returned 404 with an ArcGIS REST error body, and the basemap fell apart.
+ * ---------------------------------------------------------------------------
+ * 1. THE ZOOM BUG (fixed)
+ * ---------------------------------------------------------------------------
+ * The original style declared its raster sources with no `maxzoom`. MapLibre's
+ * raster source defaults `maxzoom` to 22 (confirmed in the installed bundle:
+ * `this.type="raster",this.minzoom=0,this.maxzoom=22`). So zooming past a
+ * provider's deepest cached level requested tiles that do not exist - Esri's
+ * Canvas services stop at z16 - and every one came back 404, tearing the
+ * basemap apart on zoom-in.
  *
- * THE FIX: declare each source's true `maxzoom`. MapLibre then OVERZOOMS - it
- * keeps drawing the deepest real tile, scaled up - instead of asking for tiles
- * the provider never published. `maxZoom` on the map caps how far that
- * upscaling may go, so the view never lands somewhere with no tiles behind it.
+ * FIX: declare each source's true `maxzoom`. MapLibre then OVERZOOMS (keeps
+ * drawing the deepest real tile, upscaled) instead of requesting tiles that
+ * were never published. `maxZoom` on the map caps how far that may go.
  *
- * Native depth per provider (this number must match the service):
- *   carto dark_all ............. z20
- *   esri World_Dark_Gray_Base .. z16
+ * ---------------------------------------------------------------------------
+ * 2. THE WATERMARK BUG (fixed)
+ * ---------------------------------------------------------------------------
+ * CARTO's basemaps are NOT keyless. Requesting basemaps.cartocdn.com without an
+ * API key returns tiles that are stamped "API KEY REQUIRED" - and it returns
+ * them with HTTP 200, so no error handler can detect the problem. The map looks
+ * broken while every request technically succeeds.
+ *
+ * Esri's Dark Gray Canvas requires no key and is not watermarked, so it is the
+ * default. Anything keyed must be supplied deliberately via the environment
+ * escape hatch below - this file never ships a provider that silently degrades.
  */
 
-export type BasemapId = "carto" | "esri";
+export type BasemapId = "esri" | "osm" | "custom";
 
 export interface BasemapDef {
   id: BasemapId;
@@ -31,31 +40,11 @@ export interface BasemapDef {
   style: StyleSpecification;
 }
 
-const CARTO: BasemapDef = {
-  id: "carto",
-  label: "CARTO Dark Matter",
-  nativeMaxZoom: 20,
-  style: {
-    version: 8,
-    sources: {
-      carto: {
-        type: "raster",
-        tiles: [
-          "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-          "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-          "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-        ],
-        tileSize: 256,
-        minzoom: 0,
-        maxzoom: 20, // <- the fix. Without this MapLibre assumes 22.
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      },
-    },
-    layers: [{ id: "carto", type: "raster", source: "carto" }],
-  },
-};
-
+/**
+ * PRIMARY - Esri Dark Gray Canvas.
+ * No API key, no watermark, dark by design. Cached to z16; the overzoom
+ * allowance below carries the view to z19 on upscaled tiles.
+ */
 const ESRI: BasemapDef = {
   id: "esri",
   label: "Esri Dark Gray Canvas",
@@ -68,7 +57,7 @@ const ESRI: BasemapDef = {
         tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"],
         tileSize: 256,
         minzoom: 0,
-        maxzoom: 16, // <- Esri caches this service to z16 only.
+        maxzoom: 16,
         attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
       },
       esri_ref: {
@@ -86,10 +75,93 @@ const ESRI: BasemapDef = {
   },
 };
 
-export const BASEMAPS: Record<BasemapId, BasemapDef> = { carto: CARTO, esri: ESRI };
+/**
+ * FALLBACK - OpenStreetMap standard, darkened in the renderer.
+ * Keyless and cached to z19, so it is the deep-zoom safety net if Esri is
+ * unreachable. The tiles are light, so raster paint properties desaturate and
+ * dim them to sit in a dark console rather than flashbanging the operator.
+ *
+ * NOTE: openstreetmap.org's tile policy discourages heavy application use. It
+ * is a fallback for a demo, not a production basemap. Set the environment
+ * override below for anything beyond that.
+ */
+const OSM: BasemapDef = {
+  id: "osm",
+  label: "OpenStreetMap (darkened)",
+  nativeMaxZoom: 19,
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        minzoom: 0,
+        maxzoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      },
+    },
+    layers: [{
+      id: "osm",
+      type: "raster",
+      source: "osm",
+      paint: {
+        "raster-saturation": -0.86,
+        "raster-brightness-min": 0.02,
+        "raster-brightness-max": 0.44,
+        "raster-contrast": 0.12,
+      },
+    }],
+  },
+};
+
+/**
+ * ENVIRONMENT OVERRIDE - for a keyed provider you have actually signed up for.
+ *
+ *   NEXT_PUBLIC_BASEMAP_TILE_URL   full tile template INCLUDING your key, e.g.
+ *     https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png?api_key=YOUR_KEY
+ *   NEXT_PUBLIC_BASEMAP_MAX_ZOOM   deepest level that provider publishes (default 20)
+ *   NEXT_PUBLIC_BASEMAP_ATTRIBUTION  attribution string the provider requires
+ *
+ * Supply the whole URL yourself so this file never has to guess a provider's
+ * query-parameter format.
+ */
+function customBasemap(): BasemapDef | null {
+  const url = process.env.NEXT_PUBLIC_BASEMAP_TILE_URL;
+  if (!url) return null;
+  const maxzoom = Number(process.env.NEXT_PUBLIC_BASEMAP_MAX_ZOOM ?? 20);
+  const safeMax = Number.isFinite(maxzoom) ? Math.min(22, Math.max(1, maxzoom)) : 20;
+  return {
+    id: "custom",
+    label: "Configured basemap",
+    nativeMaxZoom: safeMax,
+    style: {
+      version: 8,
+      sources: {
+        custom: {
+          type: "raster",
+          tiles: [url],
+          tileSize: 256,
+          minzoom: 0,
+          maxzoom: safeMax,
+          attribution: process.env.NEXT_PUBLIC_BASEMAP_ATTRIBUTION ?? "",
+        },
+      },
+      layers: [{ id: "custom", type: "raster", source: "custom" }],
+    },
+  };
+}
+
+const CUSTOM = customBasemap();
+
+export const BASEMAPS: Record<BasemapId, BasemapDef> = {
+  esri: ESRI,
+  osm: OSM,
+  custom: CUSTOM ?? ESRI,
+};
 
 /** Primary first, then the automatic fallback if the primary's tiles fail. */
-export const BASEMAP_ORDER: BasemapId[] = ["carto", "esri"];
+export const BASEMAP_ORDER: BasemapId[] = CUSTOM ? ["custom", "esri", "osm"] : ["esri", "osm"];
 
 /**
  * How far the user may zoom: a little past the deepest real tile (upscaled but

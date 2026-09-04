@@ -80,7 +80,7 @@ export default function CommandCenter() {
         </div>
       )}
 
-      <MetricStrip incidents={incidents} responders={responders} shelters={shelters} />
+      <MetricStrip incidents={incidents} responders={responders} shelters={shelters} assignments={assignments} />
 
       {/* Chaos controls move below the metrics on small screens rather than
           being cut off the header. */}

@@ -1,17 +1,21 @@
 "use client";
-import type { Incident, Responder, Shelter } from "@/lib/clientTypes";
+import type { Assignment, Incident, Responder, Shelter } from "@/lib/clientTypes";
+import { OPEN_RECOMMENDATION } from "@/lib/clientTypes";
 
 /**
  * The five numbers an operator must be able to read in one glance. Anything
  * that is zero stays quiet; anything that demands attention is coloured AND
  * carries a word, so urgency never depends on colour alone.
  */
-export function MetricStrip({ incidents, responders, shelters }: {
-  incidents: Incident[]; responders: Responder[]; shelters: Shelter[];
+export function MetricStrip({ incidents, responders, shelters, assignments }: {
+  incidents: Incident[]; responders: Responder[]; shelters: Shelter[]; assignments: Assignment[];
 }) {
   const open = incidents.filter((i) => !["resolved", "cancelled"].includes(i.status));
   const critical = open.filter((i) => i.priority_band === "CRITICAL").length;
-  const awaiting = open.filter((i) => i.status === "awaiting_approval").length;
+  // Counted the same way the queue's "Awaiting" filter counts it: an incident
+  // is only awaiting a human if a recommendation is actually live for it.
+  const awaiting = open.filter((i) =>
+    assignments.some((a) => a.incident_id === i.id && OPEN_RECOMMENDATION.includes(a.status))).length;
   const free = responders.filter((r) => r.status === "available" && r.current_load < r.max_concurrent).length;
   const capTotal = shelters.reduce((s, x) => s + x.capacity_total, 0);
   const capUsed = shelters.reduce((s, x) => s + x.capacity_used, 0);

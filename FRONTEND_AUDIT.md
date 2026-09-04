@@ -54,7 +54,7 @@ disintegrated on zoom-in. The `Map` constructor also set no `maxZoom`, so the ca
 there.
 
 ### The fix (`lib/map/basemap.ts`)
-1. **Declare each source's true `maxzoom`** (carto 20, esri 16). MapLibre now *overzooms* — it keeps
+1. **Declare each source's true `maxzoom`** (esri 16, osm 19). MapLibre now *overzooms* — it keeps
    drawing the deepest real tile, upscaled — instead of requesting tiles that were never published.
 2. **Cap the camera**: `maxZoom = nativeMaxZoom + 3`, `minZoom = 3`. The view can no longer reach a
    level with nothing behind it.
@@ -63,7 +63,13 @@ there.
 4. **Coordinate guard**: `isValidLngLat()` rejects NaN / out-of-range values before they reach
    MapLibre. Records without usable coordinates are counted and disclosed in the legend rather than
    silently dropped.
-5. Removed the bogus `?api_key=` parameter on the CARTO URL (those basemaps are keyless).
+5. **CORRECTION (post-deploy).** This audit originally made CARTO the primary basemap and stated
+   its tiles were keyless. **That was wrong.** CARTO serves unkeyed requests with tiles stamped
+   "API KEY REQUIRED" — and returns them with **HTTP 200**, so the tile-error failover could never
+   detect it. The map looked broken while every request succeeded. CARTO has been removed as a
+   default; Esri Dark Gray Canvas (keyless, unwatermarked) is primary, with darkened OpenStreetMap
+   as the deep-zoom fallback, and a `NEXT_PUBLIC_BASEMAP_TILE_URL` escape hatch for any keyed
+   provider the operator has actually signed up for.
 
 ### Live-observed evidence that the failure path works
 Rendered in headless Chromium with tile CDNs blocked. The map **started on CARTO, counted tile
@@ -243,3 +249,36 @@ Everything that needs a live backend or a real browser on real hardware:
 
 **Overall: PARTIALLY VERIFIED.** Everything statically checkable passes. Nothing requiring a live
 backend or real browser has been verified, and none of it is claimed as verified.
+
+
+---
+
+## 10. POST-DEPLOY CORRECTION — 2026-09-04
+
+**Reported:** deployed map showed "API KEY REQUIRED" watermarked across every tile.
+
+**Cause:** this audit changed the primary basemap to CARTO and described it as keyless. It is not.
+Unkeyed CARTO requests return watermarked tiles with HTTP 200 — a success status — so the tile-error
+failover added in this same pass had nothing to trigger on. A prior commit
+(`fix(map): switch to unwatermarked Esri Dark Canvas basemap with zero API key requirement`) had
+already established Esri for exactly this reason; that decision was overridden in error.
+
+**Fix:** `lib/map/basemap.ts` rewritten.
+- Primary: **Esri Dark Gray Canvas** — keyless, unwatermarked, native z16, camera capped at z19.
+- Fallback: **OpenStreetMap standard**, desaturated and dimmed via MapLibre raster paint properties
+  so it reads correctly in a dark console. Keyless, native z19.
+- Escape hatch: `NEXT_PUBLIC_BASEMAP_TILE_URL` (+ `_MAX_ZOOM`, `_ATTRIBUTION`) takes a complete tile
+  template including your key, so no provider's query-parameter format is ever guessed here.
+- The `maxzoom` zoom fix from §2 is unchanged and still applies to every provider.
+
+**Verified:** rendered in headless Chromium; the only tile hosts requested were
+`server.arcgisonline.com` and `tile.openstreetmap.org`. **Zero cartocdn requests.**
+
+**Also fixed:** the metric strip counted "Awaiting approval" as incidents whose *status* was
+`awaiting_approval` (11 in the reported screenshot) while the queue filter counted incidents with a
+*live open recommendation* (5). Only the second is actionable — an incident can sit in
+`awaiting_approval` after its recommendation was invalidated. Both now use the recommendation-based
+definition.
+
+**Still UNVERIFIED:** Esri and OSM tiles have not been fetched from this sandbox (no egress). Confirm
+with the manual test below.
