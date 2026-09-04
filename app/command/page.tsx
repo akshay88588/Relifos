@@ -15,6 +15,7 @@ import { IncidentDetail } from "@/components/incidents/IncidentDetail";
 export default function CommandCenter() {
   const { state, events, connection, lastEvent, error, refetch } = useReliefStream();
   const [selected, setSelected] = useState<string | null>(null);
+  const [mapExpanded, setMapExpanded] = useState(false);
   const refreshKey = useMemo(() => events.length, [events.length]);
 
   const simulated = (state?.incidents ?? []).some((i) => i.is_simulated)
@@ -52,7 +53,11 @@ export default function CommandCenter() {
       />
 
       <div className="flex-1 min-h-0 grid grid-cols-12 gap-2 p-2">
-        <section className="col-span-12 lg:col-span-5 xl:col-span-6 min-h-0 panel overflow-hidden">
+        <section
+          className={`min-h-0 panel overflow-hidden transition-all duration-200 ${
+            mapExpanded ? "col-span-12" : "col-span-12 lg:col-span-6"
+          }`}
+        >
           <LiveMap
             incidents={state?.incidents ?? []}
             responders={state?.responders ?? []}
@@ -61,38 +66,44 @@ export default function CommandCenter() {
             lastEvent={lastEvent}
             onSelect={setSelected}
             selectedId={selected}
+            isExpanded={mapExpanded}
+            onToggleExpand={() => setMapExpanded((prev) => !prev)}
           />
         </section>
 
-        <section className="col-span-12 md:col-span-6 lg:col-span-3 min-h-0">
-          <PriorityQueue
-            incidents={state?.incidents ?? []}
-            assignments={state?.assignments ?? []}
-            responders={state?.responders ?? []}
-            selectedId={selected}
-            onSelect={setSelected}
-          />
-        </section>
+        {!mapExpanded && (
+          <>
+            <section className="col-span-12 md:col-span-6 lg:col-span-3 min-h-0">
+              <PriorityQueue
+                incidents={state?.incidents ?? []}
+                assignments={state?.assignments ?? []}
+                responders={state?.responders ?? []}
+                selectedId={selected}
+                onSelect={setSelected}
+              />
+            </section>
 
-        <section className="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3 min-h-0 flex flex-col gap-2">
-          {selected ? (
-            <IncidentDetail
-              incidentId={selected}
-              refreshKey={refreshKey}
-              onClose={() => setSelected(null)}
-              onAction={refetch}
-            />
-          ) : (
-            <>
-              <ResponderBoard responders={state?.responders ?? []} assignments={state?.assignments ?? []} />
-              <ShelterBoard shelters={state?.shelters ?? []} />
-              <div className="panel p-3 text-[12px] text-zinc-500 leading-relaxed">
-                Select an incident to see the priority factors, the candidate scoreboard and the
-                dispatch controls.
-              </div>
-            </>
-          )}
-        </section>
+            <section className="col-span-12 md:col-span-6 lg:col-span-3 min-h-0 flex flex-col gap-2">
+              {selected ? (
+                <IncidentDetail
+                  incidentId={selected}
+                  refreshKey={refreshKey}
+                  onClose={() => setSelected(null)}
+                  onAction={refetch}
+                />
+              ) : (
+                <>
+                  <ResponderBoard responders={state?.responders ?? []} assignments={state?.assignments ?? []} />
+                  <ShelterBoard shelters={state?.shelters ?? []} />
+                  <div className="panel p-3 text-[12px] text-zinc-500 leading-relaxed">
+                    Select an incident to see the priority factors, the candidate scoreboard and the
+                    dispatch controls.
+                  </div>
+                </>
+              )}
+            </section>
+          </>
+        )}
       </div>
 
       <section className="h-[190px] shrink-0 px-2 pb-2">

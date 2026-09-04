@@ -65,7 +65,17 @@ export function LocationPicker({
       onChangeRef.current({ lat: e.lngLat.lat, lng: e.lngLat.lng });
     });
 
+    const ro = new ResizeObserver(() => {
+      map.current?.resize();
+    });
+    ro.observe(container.current);
+
+    requestAnimationFrame(() => map.current?.resize());
+    const t = setTimeout(() => map.current?.resize(), 200);
+
     return () => {
+      clearTimeout(t);
+      ro.disconnect();
       marker.current?.remove();
       marker.current = null;
       map.current?.remove();

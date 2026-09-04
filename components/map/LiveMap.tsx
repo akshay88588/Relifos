@@ -19,11 +19,12 @@ const HELP_COLOR: Record<string, string> = {
  * assignment. Everything it draws comes from database state.
  */
 export function LiveMap({
-  incidents, responders, shelters, assignments, lastEvent, onSelect, selectedId,
+  incidents, responders, shelters, assignments, lastEvent, onSelect, selectedId, isExpanded, onToggleExpand,
 }: {
   incidents: Incident[]; responders: Responder[]; shelters: Shelter[];
   assignments: Assignment[]; lastEvent: Ev | null;
   onSelect: (id: string) => void; selectedId: string | null;
+  isExpanded?: boolean; onToggleExpand?: () => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
@@ -34,7 +35,7 @@ export function LiveMap({
 
   useEffect(() => {
     if (!container.current || map.current) return;
-    map.current = new maplibregl.Map({
+    const m = new maplibregl.Map({
       container: container.current,
       style: {
         version: 8,
@@ -50,25 +51,55 @@ export function LiveMap({
       },
       center: [78.666, 17.4718],
       zoom: 12.2,
+      trackResize: true,
       attributionControl: { compact: true },
     });
-    map.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    map.current.on("load", () => {
-      map.current!.addSource("links", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.current!.addLayer({
+    map.current = m;
+
+    m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    m.addControl(new maplibregl.FullscreenControl(), "top-right");
+
+    m.on("load", () => {
+      m.resize();
+      m.addSource("links", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      m.addLayer({
         id: "links", type: "line", source: "links",
         paint: { "line-color": "#60a5fa", "line-width": 1.6, "line-dasharray": [2, 2], "line-opacity": 0.75 },
       });
       ready.current = true;
     });
+
+    // ResizeObserver ensures canvas always fills 100% of container when layout reflows
+    const ro = new ResizeObserver(() => {
+      if (map.current) {
+        map.current.resize();
+      }
+    });
+    ro.observe(container.current);
+
+    // Initial resize kicks to overcome any initial mount timing issues
+    requestAnimationFrame(() => m.resize());
+    const t1 = setTimeout(() => m.resize(), 100);
+    const t2 = setTimeout(() => m.resize(), 500);
+
     return () => {
-      Object.values(markers.current).forEach((m) => m.marker.remove());
+      clearTimeout(t1);
+      clearTimeout(t2);
+      ro.disconnect();
+      Object.values(markers.current).forEach((item) => item.marker.remove());
       markers.current = {};
       map.current?.remove();
       map.current = null;
       ready.current = false;
     };
   }, []);
+
+  // Trigger resize if isExpanded state toggles
+  useEffect(() => {
+    if (map.current) {
+      setTimeout(() => map.current?.resize(), 50);
+    }
+  }, [isExpanded]);
 
   // Redraw whenever database state changes.
   useEffect(() => {
@@ -188,7 +219,17 @@ export function LiveMap({
   return (
     <div className="relative h-full w-full">
       <div ref={container} className="absolute inset-0" />
-      <div className="absolute bottom-2 left-2 panel px-2.5 py-2 text-[10px] space-y-1 bg-base-950/85 backdrop-blur">
+      {onToggleExpand && (
+        <button
+          onClick={onToggleExpand}
+          className="absolute top-2 left-2 z-10 panel px-2 py-1 text-[11px] bg-base-950/90 hover:bg-white/10 text-zinc-300 backdrop-blur flex items-center gap-1.5 transition-colors border border-white/10"
+          title={isExpanded ? "Collapse to split view" : "Expand map to full width"}
+        >
+          <span>{isExpanded ? "⤡" : "⤢"}</span>
+          <span>{isExpanded ? "Split view" : "Full map"}</span>
+        </button>
+      )}
+      <div className="absolute bottom-2 left-2 panel px-2.5 py-2 text-[10px] space-y-1 bg-base-950/85 backdrop-blur z-10">
         <div className="label mb-1">Need</div>
         <div className="flex gap-2.5">
           {(["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const).map((b) => (

@@ -47,3 +47,21 @@ html, body {
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
 .maplibregl-ctrl-attrib { font-size: 9px; }
+
+/* Ensure MapLibre WebGL canvas fills 100% of its container */
+.maplibregl-map {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+.maplibregl-canvas-container,
+.maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
