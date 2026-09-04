@@ -23,8 +23,9 @@ begin
       ) values (
         '00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
         r.email, crypt('reliefos-demo', gen_salt('bf')), now(),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        jsonb_build_object('role', r.role, 'display_name', r.name),
+        -- role lives in app_metadata: the client cannot write it (see 0009)
+        jsonb_build_object('provider','email','providers',jsonb_build_array('email'),'role', r.role),
+        jsonb_build_object('display_name', r.name),
         now(), now()
       );
       insert into auth.identities (
