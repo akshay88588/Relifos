@@ -161,10 +161,9 @@ export async function tickChaos() {
   const executed: string[] = [];
   let cursor = run.current_step;
 
-  // Catch up on every step that is now due, not just the next one, so that a tab
-  // which was closed or throttled does not leave the scenario stranded - it
-  // resumes from wall-clock time on the next tick. Bounded by a wall-clock budget
-  // and a step cap so no single request approaches the serverless timeout.
+  // Catch up on every step that is now due, not just the next one, so a tab that
+  // was closed or throttled does not strand the scenario. Bounded by a wall-clock
+  // budget and a step cap so no single request nears the serverless timeout.
   const budgetMs = 25_000;
   const startedAt = Date.now();
   let ranThisTick = 0;
@@ -176,6 +175,26 @@ export async function tickChaos() {
     Date.now() - startedAt < budgetMs
   ) {
     const step = steps[cursor];
+
+    // CLAIM THE STEP BEFORE RUNNING IT.
+    //
+    // The browser polls this endpoint every 2.5s. Two overlapping ticks used to
+    // both read current_step = N, both judge step N due, and both execute it -
+    // duplicating an incident or a match in the audit trail. The claim is a
+    // conditional UPDATE: only the tick whose `current_step` still equals the
+    // value it read wins the row, and only the winner executes. The loser sees
+    // no row and moves on. Exactly-once, enforced by Postgres rather than by
+    // hoping the polls never overlap.
+    const { data: claimed } = await admin()
+      .from("simulation_runs")
+      .update({ current_step: cursor + 1 })
+      .eq("id", run.id)
+      .eq("current_step", cursor)
+      .select("id")
+      .maybeSingle();
+
+    if (!claimed) break; // another tick claimed this step; it owns the execution
+
     try {
       await executeStep(step, run.id);
       executed.push(step.label);
@@ -187,7 +206,6 @@ export async function tickChaos() {
     }
     cursor++;
     ranThisTick++;
-    await admin().from("simulation_runs").update({ current_step: cursor }).eq("id", run.id);
   }
 
   const done = cursor >= steps.length;
