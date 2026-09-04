@@ -5,7 +5,7 @@ import * as R from "@/lib/repositories/responders";
 import { intakeIncident } from "./incidentService";
 import { setResponderStatus } from "./responderService";
 import { adjustShelterCapacity } from "./resourceService";
-import { ageOpenIncidents } from "./reconciler";
+import { ageOpenIncidents, recomputePriority } from "./reconciler";
 import { setConfig } from "./config";
 import { assertWithinOperatingArea, jitterAround, placeByName } from "@/lib/places";
 
@@ -122,13 +122,47 @@ export async function seedWorld() {
 }
 
 /** One background incident per call, so no single request has to wait on many model calls. */
+/**
+ * How long ago each seeded incident was "reported", in minutes.
+ *
+ * Everything used to be created at intake time, so a freshly seeded queue was
+ * uniformly 0 minutes old while a stale one showed ages of 10-11 hours — neither
+ * looks like a live event. These are spread across the last 90 minutes and
+ * deliberately uneven, so the queue reads like an unfolding incident. The
+ * spread also exercises the priority engine's time-pressure term, which is
+ * capped at 8 points over 40 minutes, without anything being faked: the age is
+ * a real created_at that the engine genuinely scores.
+ */
+const SEED_AGES_MINUTES = [4, 19, 43, 78];
+
 export async function seedIncident(index: number) {
   const spec = DEMO_INCIDENTS[index];
   if (!spec) return null;
-  return intakeIncident({
+
+  const result = await intakeIncident({
     description: spec.text, ...anchorOf(spec.place, 300 + index),
     source: "simulation", address_text: spec.place, is_simulated: true,
   });
+
+  // Backdate the report, then re-score it so the queue shows the priority the
+  // engine actually derives from that age rather than the one computed when the
+  // row was a second old.
+  const ageMinutes = SEED_AGES_MINUTES[index % SEED_AGES_MINUTES.length];
+  if (ageMinutes > 0 && result?.incident) {
+    const reportedAt = new Date(Date.now() - ageMinutes * 60_000).toISOString();
+    const { error } = await admin()
+      .from("incidents")
+      .update({ created_at: reportedAt })
+      .eq("id", result.incident.id);
+    if (error) {
+      console.error("[simulation] could not backdate seeded incident", error.message);
+    } else {
+      const fresh = await I.getIncident(result.incident.id);
+      if (fresh) await recomputePriority(fresh, "seed_backdated");
+    }
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------- CHAOS MODE
