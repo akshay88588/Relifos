@@ -1,5 +1,7 @@
 # ReliefOS
 
+![CI](https://github.com/akshay88588/Relifos/actions/workflows/ci.yml/badge.svg)
+
 - **Live demo:** https://relifos.vercel.app/command
 - **Demo video:** https://youtu.be/JntxfGlJ4tc
 - **Built with Featherless.ai** — two agents, `lib/agents/`
