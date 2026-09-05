@@ -152,5 +152,39 @@ export function useReliefStream() {
     return () => clearInterval(t);
   }, [connection, refetch]);
 
+  /**
+   * STALENESS FLOOR - a screen may never be more than one tick behind.
+   *
+   * "SUBSCRIBED" is not proof that events will keep arriving. A socket can go
+   * quiet without ever emitting CLOSED, and a backgrounded tab has its timers
+   * throttled to near nothing. Because the poll above is switched OFF while the
+   * connection reads `live`, either case froze the screen with nothing behind it
+   * to notice - which is how /responder could sit on AVAILABLE for a unit that
+   * /command had already shown offline.
+   *
+   * So: a slow re-read even while live, and an immediate one whenever the tab
+   * comes back to the foreground, regains focus, or the network returns. The
+   * refetch coalesces, so these never stack up.
+   */
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      refetch();
+    }, 15000);
+    const wake = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      refetch();
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("online", wake);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("online", wake);
+    };
+  }, [refetch]);
+
   return { state, events, connection, lastEvent, error, refetch };
 }

@@ -154,6 +154,17 @@ html, body { max-width: 100%; overflow-x: hidden; }
   }
   .btn-ghost:hover:not(:disabled) { background: var(--surface-active); color: var(--text-primary); }
 
+  /* A toggle showing the state you are ALREADY in is not a dead control: it is
+     the selected one. Without this it inherited .btn:disabled's 0.42 opacity and
+     the whole row read as greyed out, so the responder console looked frozen. */
+  .btn[aria-pressed="true"]:disabled {
+    opacity: 1;
+    cursor: default;
+    background: var(--surface-active);
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
+
   .btn-sm { @apply px-2 py-0.5 text-[11px]; min-height: 24px; }
 
   @media (pointer: coarse) {
