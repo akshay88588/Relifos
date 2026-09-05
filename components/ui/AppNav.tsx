@@ -25,7 +25,9 @@ export function AppNav({ className }: { className?: string }) {
   return (
     <nav
       aria-label="Workspaces"
-      className={clsx("flex items-center gap-0.5 rounded-md p-0.5 shrink-0", className)}
+      // The nav is the flexible element in a crowded header: it scrolls rather
+      // than pushing the connection pill and user chip off a 390px screen.
+      className={clsx("flex items-center gap-0.5 rounded-md p-0.5 min-w-0 overflow-x-auto scroll-x-bare", className)}
       style={{ background: "var(--surface-hover)" }}
     >
       {WORKSPACES.map((w) => {
@@ -38,14 +40,17 @@ export function AppNav({ className }: { className?: string }) {
             title={w.hint}
             aria-current={active ? "page" : undefined}
             className={clsx(
-              "flex items-center gap-1.5 rounded px-1.5 sm:px-2 py-1 text-[11px] font-medium",
+              "flex items-center gap-1.5 rounded px-1.5 sm:px-2 py-1 text-[11px] font-medium shrink-0",
               "whitespace-nowrap transition-colors min-h-[28px]",
               active ? "text-ink-primary" : "text-ink-tertiary hover:text-ink-secondary",
             )}
             style={active ? { background: "var(--surface-active)", boxShadow: "inset 0 0 0 1px var(--border-default)" } : undefined}
           >
             <Icon size={13} />
-            <span className="hidden sm:inline">{w.label}</span>
+            {/* Three unlabelled icons on a phone are a guessing game. The one you
+                are on keeps its label so the row still says where you are; the
+                other two shrink to icons so the header survives a 390px screen. */}
+            <span className={active ? "inline" : "hidden sm:inline"}>{w.label}</span>
           </Link>
         );
       })}

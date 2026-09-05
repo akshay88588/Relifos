@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useReliefStream } from "@/lib/realtime/useReliefStream";
+import { AUTH_REQUIRED, useReliefStream } from "@/lib/realtime/useReliefStream";
 import { LiveMap } from "@/components/map/LiveMap";
 import { MetricStrip } from "@/components/command/MetricStrip";
 import { PriorityQueue } from "@/components/command/PriorityQueue";
@@ -11,6 +11,7 @@ import { ChaosControls } from "@/components/command/ChaosControls";
 import { ConnectionPill, SystemChip } from "@/components/command/StatusBar";
 import { UserChip } from "@/components/command/UserChip";
 import { AppNav } from "@/components/ui/AppNav";
+import { SignInGate } from "@/components/ui/SignInGate";
 import { IncidentDetail } from "@/components/incidents/IncidentDetail";
 import { ActivityIcon, ListIcon, MapIcon, WarnIcon } from "@/components/ui/bits";
 
@@ -74,7 +75,14 @@ export default function CommandCenter() {
         </div>
       </header>
 
-      {error && (
+      {error === AUTH_REQUIRED && (
+        <SignInGate
+          next="/command"
+          blurb="The command centre is where recommendations are approved and units are dispatched. Signing in as a coordinator unlocks those controls and Chaos Mode."
+        />
+      )}
+
+      {error && error !== AUTH_REQUIRED && (
         <div className="px-4 py-2 text-[12px] flex items-center gap-2 shrink-0" role="alert"
              style={{ background: "var(--p-critical-bg)", borderBottom: "1px solid var(--p-critical-bd)", color: "var(--p-critical)" }}>
           <WarnIcon /> {error}

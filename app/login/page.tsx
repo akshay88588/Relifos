@@ -5,9 +5,25 @@ import { Suspense, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { Spinner, WarnIcon } from "@/components/ui/bits";
 
-const DEMO = [
-  { label: "Coordinator", email: "coordinator@reliefos.com", to: "/command", note: "Approve dispatches, run Chaos Mode" },
-  { label: "Responder", email: "responder@reliefos.com", to: "/responder", note: "Accept assignments, change status" },
+/**
+ * WHERE AM I GOING?
+ *
+ * Sign-in used to send everyone to /command whatever their role, so a
+ * responder had to know to type /responder by hand. The destination is now an
+ * explicit choice made before signing in, defaulted from ?next= when another
+ * screen sent you here. A wrong pick costs one tap on the workspace switcher.
+ */
+const DESTINATIONS = [
+  { id: "coordinator", href: "/command", label: "Coordinator", note: "Approve dispatches, run Chaos Mode" },
+  { id: "responder", href: "/responder", label: "Responder", note: "Your unit, its assignment and status" },
+  { id: "citizen", href: "/report", label: "Reporting", note: "Report an emergency" },
+] as const;
+
+type Dest = (typeof DESTINATIONS)[number]["id"];
+
+const DEMO: { label: string; email: string; dest: Dest; note: string }[] = [
+  { label: "Coordinator", email: "coordinator@reliefos.com", dest: "coordinator", note: "Approve dispatches, run Chaos Mode" },
+  { label: "Responder", email: "responder@reliefos.com", dest: "responder", note: "Accept assignments, change status" },
 ];
 
 type Mode = "signin" | "signup";
@@ -17,11 +33,16 @@ function LoginForm() {
   const params = useSearchParams();
 
   const [mode, setMode] = useState<Mode>("signin");
+  const [dest, setDest] = useState<Dest>(
+    () => DESTINATIONS.find((d) => d.href === params.get("next"))?.id ?? "coordinator",
+  );
   const [email, setEmail] = useState("coordinator@reliefos.com");
   const [password, setPassword] = useState("reliefos-demo");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(params.get("error"));
   const [notice, setNotice] = useState<string | null>(null);
+
+  const hrefFor = (id: Dest) => DESTINATIONS.find((d) => d.id === id)!.href;
 
   /** Email + password sign-in. Also used by the demo quick-fill buttons. */
   async function signIn(to: string, withEmail = email, withPassword = password) {
@@ -53,7 +74,7 @@ function LoginForm() {
       setMode("signin");
       return;
     }
-    router.push("/command");
+    router.push(hrefFor(dest));
     router.refresh();
   }
 
@@ -78,9 +99,36 @@ function LoginForm() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (mode === "signin") signIn("/command"); else signUp();
+              if (mode === "signin") signIn(hrefFor(dest)); else signUp();
             }}
           >
+            <fieldset className="mb-4">
+              <legend className="label mb-1.5">Continue as</legend>
+              <div className="grid grid-cols-3 gap-1 rounded-md p-1" style={{ background: "var(--surface-hover)" }}>
+                {DESTINATIONS.map((d) => {
+                  const on = dest === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => setDest(d.id)}
+                      aria-pressed={on}
+                      title={d.note}
+                      className="rounded px-2 py-1.5 text-[12px] font-medium transition-colors"
+                      style={on
+                        ? { background: "var(--surface-active)", color: "var(--text-primary)", boxShadow: "inset 0 0 0 1px var(--accent)" }
+                        : { color: "var(--text-tertiary)" }}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] text-ink-faint">
+                {DESTINATIONS.find((d) => d.id === dest)!.note} — you can switch consoles any time from the header.
+              </p>
+            </fieldset>
+
             <label className="label block mb-1" htmlFor="email">Email</label>
             <input id="email" type="email" autoComplete="username" required
               value={email} onChange={(e) => setEmail(e.target.value)} className="field mb-3" />
@@ -141,14 +189,15 @@ function LoginForm() {
               disabled={!!busy}
               onClick={() => {
                 setMode("signin");
+                setDest(d.dest);
                 setEmail(d.email); setPassword("reliefos-demo");
-                signIn(d.to, d.email, "reliefos-demo");
+                signIn(hrefFor(d.dest), d.email, "reliefos-demo");
               }}
               className="btn-ghost w-full mb-2 !justify-start text-left !py-2"
             >
               <span className="flex flex-col items-start gap-0.5 min-w-0">
                 <span className="text-ink-primary text-[13px]">
-                  {busy === d.to ? "Signing in…" : d.label}
+                  {busy === hrefFor(d.dest) ? "Signing in…" : d.label}
                 </span>
                 <span className="text-[10.5px] text-ink-faint truncate">{d.note}</span>
               </span>

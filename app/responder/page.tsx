@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useReliefStream } from "@/lib/realtime/useReliefStream";
+import { AUTH_REQUIRED, useReliefStream } from "@/lib/realtime/useReliefStream";
 import { ConnectionPill } from "@/components/command/StatusBar";
 import { UserChip } from "@/components/command/UserChip";
 import { AppNav } from "@/components/ui/AppNav";
+import { SignInGate } from "@/components/ui/SignInGate";
 import {
-  EmptyState, LoadingState, PriorityBadge, Spinner, StatusDot, StatusPill, WarnIcon,
+  EmptyState, LoadingState, PriorityBadge, Spinner, StatusDot, StatusPill, WarnIcon, timeAgo,
 } from "@/components/ui/bits";
 import { ACTIVE_ASSIGNMENT } from "@/lib/clientTypes";
 import type { Assignment, Incident, Responder } from "@/lib/clientTypes";
@@ -94,9 +95,16 @@ export default function ResponderConsole() {
         </div>
       </header>
 
+      {error === AUTH_REQUIRED && (
+        <SignInGate
+          next="/responder"
+          blurb="The responder console is your unit: its status, its current dispatch, and what it is eligible for. Sign in as a responder to change status and accept assignments."
+        />
+      )}
+
       <main id="main" className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
         <h1 className="sr-only">Responder console</h1>
-        {error && (
+        {error && error !== AUTH_REQUIRED && (
           <p className="mb-4 text-[12.5px] panel p-3 flex items-start gap-2" role="alert"
              style={{ color: "var(--danger)", borderColor: "var(--p-critical-bd)" }}>
             <span className="mt-0.5 shrink-0"><WarnIcon /></span>
@@ -104,36 +112,49 @@ export default function ResponderConsole() {
           </p>
         )}
 
-        <div className="panel p-4">
-          <label htmlFor="unit-select" className="label block mb-2">Operating as</label>
-          {!state ? (
-            <LoadingState label="Loading units" rows={1} />
-          ) : responders.length === 0 ? (
+        {/* A provisioned responder has exactly one unit and no choice to make, so
+            the picker collapses to a line of text and the unit card - the thing
+            they actually came for - starts at the top of the screen. Only a
+            coordinator operating someone else's unit gets the full control. */}
+        {!state ? (
+          <div className="panel p-4"><LoadingState label="Loading units" rows={1} /></div>
+        ) : responders.length === 0 ? (
+          <div className="panel p-4">
             <EmptyState title="No units available" hint="A coordinator needs to seed the demo world first." />
-          ) : (
+          </div>
+        ) : boundLoaded && boundUnit ? (
+          <p className="text-[11px] text-ink-faint mb-2">
+            Signed in as this unit. Coordinators can operate any unit.
+          </p>
+        ) : (
+          <div className="panel p-3 flex items-center gap-3">
+            <label htmlFor="unit-select" className="label shrink-0">Operating as</label>
             <select
               id="unit-select"
               value={me ?? ""}
               onChange={(e) => setMe(e.target.value || null)}
-              className="field"
-              disabled={Boolean(boundUnit)}
+              className="field !py-1.5"
             >
               <option value="">Select your unit…</option>
-              {(boundUnit ? responders.filter((r) => r.id === boundUnit) : responders).map((r) => (
+              {responders.map((r) => (
                 <option key={r.id} value={r.id}>{r.name} — {r.type}</option>
               ))}
             </select>
-          )}
-          {boundLoaded && boundUnit && (
-            <p className="mt-2 text-[11px] text-ink-faint">
-              This account is linked to a single unit. Coordinators can operate any unit.
-            </p>
-          )}
-        </div>
+          </div>
+        )}
+
+        {state && responders.length > 0 && !unit && (
+          <div className="mt-3 panel">
+            <EmptyState
+              title="Pick your unit to begin"
+              hint="Choose the unit you are operating. Its status, current dispatch and shift history appear here."
+            />
+          </div>
+        )}
 
         {unit && (
           <>
-            <section aria-label="Your unit" className="mt-3 panel p-4">
+            <section aria-label="Your unit" className="panel p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-[15px] text-ink-primary flex items-center gap-2">
@@ -254,7 +275,7 @@ function ShiftHistory({ unit, assignments, incidents }: {
     .filter((a) => a.responder_id === unit.id)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
     .slice(0, 8);
-  const codeOf = (id: string) => incidents.find((i) => i.id === id)?.code ?? "incident";
+  const incidentOf = (id: string) => incidents.find((i) => i.id === id);
 
   return (
     <section aria-label="Your assignments this session" className="mt-3 panel">
@@ -269,17 +290,40 @@ function ShiftHistory({ unit, assignments, incidents }: {
         </p>
       ) : (
         <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
-          {mine.map((a) => (
-            <li key={a.id} className="px-3 py-2 flex items-center justify-between gap-2">
-              <span className="font-mono text-[12px] text-ink-secondary">{codeOf(a.incident_id)}</span>
-              <span className="flex items-center gap-2 shrink-0">
-                <span className="text-[11px] text-ink-faint tabular-nums">
-                  match {Math.round(a.match_score)}
-                </span>
-                <StatusPill status={a.status} />
-              </span>
-            </li>
-          ))}
+          {mine.map((a) => {
+            const i = incidentOf(a.incident_id);
+            return (
+              <li key={a.id} className="px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 min-w-0">
+                    {i && <PriorityBadge band={i.priority_band} score={i.priority_score} size="sm" />}
+                    <span className="font-mono text-[12px] text-ink-secondary shrink-0">
+                      {i?.code ?? "incident"}
+                    </span>
+                  </span>
+                  <StatusPill status={a.status} />
+                </div>
+                {/* A row that is only a code and a number says nothing about what
+                    the shift actually was. The summary is the point of the log. */}
+                {i?.short_summary && (
+                  <p className="mt-1 text-[12px] text-ink-tertiary leading-snug line-clamp-2">
+                    {i.short_summary}
+                  </p>
+                )}
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-ink-faint tabular-nums">
+                  <span>{timeAgo(a.created_at)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>match {Math.round(a.match_score)}</span>
+                  {a.eta_minutes != null && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>ETA ~{Math.round(a.eta_minutes)} min</span>
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

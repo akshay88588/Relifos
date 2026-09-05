@@ -204,6 +204,11 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .scroll-y::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
   .scroll-y::-webkit-scrollbar-track { background: transparent; }
 
+  /* A nav that scrolls only on the narrowest screens should not carry a
+     permanent scrollbar that changes the header height on desktop. */
+  .scroll-x-bare { scrollbar-width: none; -ms-overflow-style: none; }
+  .scroll-x-bare::-webkit-scrollbar { display: none; }
+
   /* ---------- Skip link ---------- */
   .skip-link {
     @apply absolute left-3 z-50 px-3 py-2 rounded-md text-[13px] font-medium;

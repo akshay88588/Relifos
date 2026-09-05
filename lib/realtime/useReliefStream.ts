@@ -5,6 +5,13 @@ import type { Ev, ReliefState } from "@/lib/clientTypes";
 
 export type Connection = "connecting" | "live" | "reconnecting" | "offline";
 
+/**
+ * Not an error the operator can act on by retrying - it means there is no
+ * session. Pages match on it so the sign-in gate can own that case instead of
+ * a red strip that reads like the console is broken.
+ */
+export const AUTH_REQUIRED = "auth-required";
+
 const MAX_CLIENT_EVENTS = 500;
 
 /**
@@ -71,7 +78,7 @@ export function useReliefStream() {
         pending.current = false;
         const res = await fetch("/api/state", { cache: "no-store" });
         if (res.status === 401 || res.status === 403) {
-          setError("Sign in as a coordinator to view live state.");
+          setError(AUTH_REQUIRED);
           return;
         }
         if (!res.ok) { setError(`State read failed (${res.status})`); return; }
