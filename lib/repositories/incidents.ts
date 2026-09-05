@@ -58,6 +58,41 @@ export async function getIncident(id: string) {
   return (data as unknown as IncidentRow) ?? null;
 }
 
+/**
+ * CLAIM A PRIORITY TRANSITION.
+ *
+ * Two recomputes can run concurrently - the Chaos "time pressure" step and
+ * /api/system/tick both call ageOpenIncidents - and both read the same row
+ * before either writes. Both then judge the priority changed and both publish
+ * `incident.priority_changed`, putting two byte-identical rows at the same
+ * microsecond into the audit trail.
+ *
+ * `priority_computed_at` is the optimistic-concurrency token: the update only
+ * lands if the row still carries the value this caller read. Under READ
+ * COMMITTED the loser re-evaluates the predicate against the winner's row,
+ * fails it, and gets nothing back - so it knows not to publish. Exactly-once,
+ * enforced by Postgres rather than by hoping the two callers never overlap.
+ */
+export async function claimPriorityChange(
+  id: string,
+  expectedComputedAt: string | null,
+  next: { score: number; band: string; computed_at: string },
+) {
+  let q = admin().from("incidents")
+    .update({
+      priority_score: next.score,
+      priority_band: next.band,
+      priority_computed_at: next.computed_at,
+    })
+    .eq("id", id);
+  q = expectedComputedAt === null
+    ? q.is("priority_computed_at", null)
+    : q.eq("priority_computed_at", expectedComputedAt);
+  const { data, error } = await q.select(INCIDENT_COLUMNS).maybeSingle();
+  if (error) throw new Error(`claimPriorityChange: ${error.message}`);
+  return (data as unknown as IncidentRow) ?? null;
+}
+
 export async function updateIncident(id: string, patch: Record<string, any>) {
   const { data, error } = await admin().from("incidents").update(patch).eq("id", id).select(INCIDENT_COLUMNS).single();
   if (error) throw new Error(`updateIncident: ${error.message}`);

@@ -51,11 +51,29 @@ export async function recomputePriority(
     { score: result.score, band: result.band },
   );
 
-  const updated = await I.updateIncident(incident.id, {
-    priority_score: result.score,
-    priority_band: result.band,
-    priority_computed_at: new Date().toISOString(),
-  });
+  const computedAt = new Date().toISOString();
+
+  // A material change is CLAIMED, not merely written: only the caller whose
+  // read still matches the stored row wins it, and only the winner publishes.
+  // Without this, two overlapping recomputes of the same incident both saw the
+  // same "before" values and both wrote incident.priority_changed - two
+  // identical rows at the same microsecond in the audit trail.
+  const claimed = changed
+    ? await I.claimPriorityChange(
+        incident.id,
+        incident.priority_computed_at,
+        { score: result.score, band: result.band, computed_at: computedAt },
+      )
+    : await I.updateIncident(incident.id, {
+        priority_score: result.score,
+        priority_band: result.band,
+        priority_computed_at: computedAt,
+      });
+
+  // Lost the race: the other caller already wrote this exact transition and
+  // published for it. Return its row and stay quiet.
+  if (!claimed) return (await I.getIncident(incident.id)) ?? incident;
+  const updated = claimed;
 
   await D.replaceFactors({
     subject_type: "priority", subject_id: incident.id,
