@@ -112,7 +112,7 @@ export default function CommandCenter() {
               <section aria-label="Priority queue" className="col-span-12 md:col-span-6 lg:col-span-3 min-h-0">
                 <PriorityQueue
                   incidents={incidents} assignments={assignments} responders={responders}
-                  exclusions={state?.exclusions}
+                  exclusions={state?.exclusions} factors={state?.factors}
                   selectedId={selected} onSelect={setSelected}
                 />
               </section>
@@ -156,7 +156,7 @@ export default function CommandCenter() {
               ) : (
                 <PriorityQueue
                   incidents={incidents} assignments={assignments} responders={responders}
-                  exclusions={state?.exclusions}
+                  exclusions={state?.exclusions} factors={state?.factors}
                   selectedId={selected} onSelect={setSelected}
                 />
               )}

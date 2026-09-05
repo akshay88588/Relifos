@@ -48,6 +48,33 @@ export async function listFactors(subjectType: "priority" | "match", subjectId: 
   return data ?? [];
 }
 
+/**
+ * Priority factors for many incidents at once, so the queue can show WHY each
+ * card scored what it did without a round trip per card. Read back from
+ * decision_factors - the same rows the detail panel shows - so the bar and the
+ * breakdown can never disagree.
+ */
+export async function priorityFactorsFor(incidentIds: string[]) {
+  if (!incidentIds.length) return {} as Record<string, DecisionFactor[]>;
+  const { data, error } = await admin().from("decision_factors")
+    .select("subject_id, label, detail, contribution, direction")
+    .eq("subject_type", "priority")
+    .in("subject_id", incidentIds)
+    .order("contribution", { ascending: false });
+  if (error) {
+    console.error("[factors] priorityFactorsFor", error.message);
+    return {} as Record<string, DecisionFactor[]>;
+  }
+  const out: Record<string, DecisionFactor[]> = {};
+  for (const row of (data ?? []) as any[]) {
+    (out[row.subject_id] ??= []).push({
+      label: row.label, detail: row.detail,
+      contribution: Number(row.contribution), direction: row.direction,
+    });
+  }
+  return out;
+}
+
 export async function listAiDecisions(incidentId: string) {
   const { data } = await admin().from("ai_decisions")
     .select("id, agent, provider, model, validation_status, fallback_used, confidence, latency_ms, structured_output, error_text, created_at")

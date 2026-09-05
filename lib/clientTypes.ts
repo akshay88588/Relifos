@@ -44,6 +44,8 @@ export interface ReliefState {
   incidents: Incident[];
   /** incident id -> why no responder could be recommended */
   exclusions?: Record<string, ExclusionSummary>;
+  /** incident id -> the priority terms the engine scored */
+  factors?: Record<string, Factor[]>;
   responders: Responder[];
   assignments: Assignment[];
   shelters: Shelter[];

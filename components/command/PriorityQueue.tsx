@@ -1,9 +1,10 @@
 "use client";
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import type { Assignment, ExclusionSummary, Incident, Responder } from "@/lib/clientTypes";
+import type { Assignment, ExclusionSummary, Factor, Incident, Responder } from "@/lib/clientTypes";
 import { OPEN_RECOMMENDATION, ACTIVE_ASSIGNMENT } from "@/lib/clientTypes";
 import { EmptyState, ListIcon, PriorityBadge, timeAgo } from "@/components/ui/bits";
+import { PriorityBar } from "./PriorityBar";
 
 type Filter = "all" | "critical" | "awaiting" | "unassigned";
 
@@ -21,9 +22,10 @@ const FILTERS: { id: Filter; label: string; hint: string }[] = [
  * filters and the search box operate on the real incident list already in
  * state; nothing here fetches, invents or caches a separate copy.
  */
-export function PriorityQueue({ incidents, assignments, responders, exclusions, selectedId, onSelect }: {
+export function PriorityQueue({ incidents, assignments, responders, exclusions, factors, selectedId, onSelect }: {
   incidents: Incident[]; assignments: Assignment[]; responders: Responder[];
   exclusions?: Record<string, ExclusionSummary>;
+  factors?: Record<string, Factor[]>;
   selectedId: string | null; onSelect: (id: string) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
@@ -168,6 +170,8 @@ export function PriorityQueue({ incidents, assignments, responders, exclusions, 
                     )}
                     <span className="text-ink-faint">conf {Math.round(i.ai_confidence * 100)}%</span>
                   </div>
+
+                  <PriorityBar factors={factors?.[i.id]} />
 
                   {active ? (
                     <div className="mt-1.5 text-[11px]" style={{ color: "var(--st-enroute)" }}>

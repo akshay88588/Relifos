@@ -5,6 +5,7 @@ import { listResponders } from "@/lib/repositories/responders";
 import { listAssignments } from "@/lib/repositories/assignments";
 import { admin } from "@/lib/supabase/admin";
 import { exclusionSummaryFor } from "@/lib/repositories/matches";
+import { priorityFactorsFor } from "@/lib/repositories/decisions";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +40,12 @@ export async function GET() {
   const unmatched = incidents.filter((i) => !liveAssignment.has(i.id)).map((i) => i.id);
   const exclusions = await exclusionSummaryFor(unmatched);
 
+  // The priority breakdown the engine persisted, batched for the whole queue so
+  // every card can explain its own score without the coordinator clicking first.
+  const factors = await priorityFactorsFor(incidents.map((i) => i.id));
+
   return ok({
-    incidents, responders, assignments, exclusions,
+    incidents, responders, assignments, exclusions, factors,
     shelters: shelters.data ?? [],
     events: (events.data ?? []).reverse(),
     notifications: notifications.data ?? [],
