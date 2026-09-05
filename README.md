@@ -1,7 +1,7 @@
 # ReliefOS
 
-- **Live demo:** __DEPLOY_URL__
-- **Demo video:** __VIDEO_URL__
+- **Live demo:** https://relifos.vercel.app/command
+- **Demo video:** https://youtu.be/MpZ5qSTlIDY
 - **Built with Featherless.ai** — two agents, `lib/agents/`
 
 **Real-time AI emergency coordination operating system.**
