@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { LocationPicker } from "@/components/map/LocationPicker";
 import { CheckIcon, MicIcon, PriorityBadge, Spinner, WarnIcon } from "@/components/ui/bits";
+import { AppNav } from "@/components/ui/AppNav";
 
 type Stage = "idle" | "listening" | "sending" | "done" | "error";
 type LocSource = "pending" | "gps" | "manual" | "unavailable";
@@ -153,7 +154,7 @@ export default function ReportPage() {
         <Link href="/" className="font-semibold tracking-tight">
           RELIEF<span style={{ color: "var(--accent-hover)" }}>OS</span>
         </Link>
-        <Link href="/command" className="label hover:text-ink-secondary transition-colors">Command centre →</Link>
+        <AppNav />
       </header>
 
       <main id="main" className="max-w-2xl mx-auto px-5 py-8 sm:py-10">

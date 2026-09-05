@@ -244,6 +244,15 @@ export function MicIcon({ size = 22 }: { size?: number }) {
 export function CheckIcon({ size = 14 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="m4 12.5 5 5L20 6.5" /></svg>;
 }
+export function GridIcon({ size = 14 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" /></svg>;
+}
+export function TruckIcon({ size = 14 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="M2.5 6.5h10v9h-10z" /><path d="M12.5 10h4l3 3v2.5h-7z" /><circle cx="6.5" cy="18" r="1.8" /><circle cx="16.5" cy="18" r="1.8" /></svg>;
+}
+export function MegaphoneIcon({ size = 14 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><path d="M3 10v4a1.5 1.5 0 0 0 1.5 1.5H7l9 4.5V5L7 9.5H4.5A1.5 1.5 0 0 0 3 11Z" /><path d="M19 9.5a3.5 3.5 0 0 1 0 5" /></svg>;
+}
 export function TargetIcon({ size = 14 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" {...ico} aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" /><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" /></svg>;
 }

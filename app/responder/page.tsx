@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useReliefStream } from "@/lib/realtime/useReliefStream";
 import { ConnectionPill } from "@/components/command/StatusBar";
 import { UserChip } from "@/components/command/UserChip";
+import { AppNav } from "@/components/ui/AppNav";
 import {
   EmptyState, LoadingState, PriorityBadge, Spinner, StatusDot, StatusPill, WarnIcon,
 } from "@/components/ui/bits";
@@ -84,7 +85,8 @@ export default function ResponderConsole() {
           <Link href="/" className="font-semibold tracking-tight shrink-0">
             RELIEF<span style={{ color: "var(--accent-hover)" }}>OS</span>
           </Link>
-          <span className="label hidden sm:inline">Responder console</span>
+          <span className="label hidden lg:inline">Responder console</span>
+          <AppNav />
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <ConnectionPill connection={connection} />

@@ -10,6 +10,7 @@ import { ResponderBoard, ShelterBoard } from "@/components/command/SideBoards";
 import { ChaosControls } from "@/components/command/ChaosControls";
 import { ConnectionPill, SystemChip } from "@/components/command/StatusBar";
 import { UserChip } from "@/components/command/UserChip";
+import { AppNav } from "@/components/ui/AppNav";
 import { IncidentDetail } from "@/components/incidents/IncidentDetail";
 import { ActivityIcon, ListIcon, MapIcon, WarnIcon } from "@/components/ui/bits";
 
@@ -56,7 +57,8 @@ export default function CommandCenter() {
           <Link href="/" className="text-[15px] font-semibold tracking-tight shrink-0">
             RELIEF<span style={{ color: "var(--accent-hover)" }}>OS</span>
           </Link>
-          <span className="label hidden lg:inline whitespace-nowrap">Emergency command centre</span>
+          <span className="label hidden xl:inline whitespace-nowrap">Emergency command centre</span>
+          <AppNav />
           {simulated && (
             <span className="chip shrink-0" style={{ background: "var(--p-medium-bg)", color: "var(--p-medium)" }}
                   title="Some records on this screen were created by Simulation or Chaos Mode">
